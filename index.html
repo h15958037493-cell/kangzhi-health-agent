@@ -291,6 +291,42 @@
     document.getElementById('modal').addEventListener('click', function(e) {
       if(e.target.classList.contains('modal')) closeModal();
     });
+
+    var chartMain = echarts.getInstanceByDom(document.getElementById('mainChart'));
+    var chartPie = echarts.getInstanceByDom(document.getElementById('pieChart'));
+    var chartRate = echarts.getInstanceByDom(document.getElementById('rateChart'));
+
+    var currentPush = totalPush;
+    var currentView = totalView;
+
+    setInterval(function() {
+      var pushInc = Math.floor(Math.random() * 3) + 1;
+      var viewInc = Math.floor(Math.random() * 4) + 1;
+
+      currentPush += pushInc;
+      currentView += viewInc;
+      var currentRate = ((currentView / currentPush) * 100).toFixed(1);
+
+      document.getElementById('totalPush').textContent = currentPush.toLocaleString();
+      document.getElementById('totalView').textContent = currentView.toLocaleString();
+      document.getElementById('overallRate').textContent = currentRate + '%';
+      document.getElementById('avgRate').textContent = currentRate + '%';
+
+      chartMain.setOption({
+        series: [
+          { name: '推送次数', data: pushData },
+          { name: '查看次数', data: viewData }
+        ]
+      });
+
+      chartPie.setOption({
+        series: [{ type: 'pie', radius: ['45%', '75%'], data: diseases.map(function(n,i) { return { value: pushData[i], name: n }; }) }]
+      });
+
+      chartRate.setOption({
+        series: [{ name: '查看率', data: viewRates.slice().reverse(), itemStyle: { color: '#f97316' } }]
+      });
+    }, 6000);
   </script>
 </body>
 </html>
