@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>健康宣教系统数据大屏</title>
+  <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    }
+    .dashboard {
+      height: 100vh;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      grid-template-rows: 70px repeat(4, 1fr);
+      gap: 12px;
+    }
+    .header {
+      grid-column: 1/-1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 24px;
+      background: white;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+    }
+    .header h1 { font-size: 20px; }
+    .card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .card-header { display: flex; justify-content: space-between; margin-bottom: 12px; }
+    .card-title { font-size: 14px; font-weight: 500; }
+    .card-action { font-size: 12px; color: #64748b; cursor: pointer; }
+    .stat-card {
+      padding: 20px;
+      background: linear-gradient(135deg, rgba(37,99,235,0.05), rgba(124,58,237,0.03));
+    }
+    .stat-card .number {
+      font-size: 40px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #2563eb, #16a34a);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .stat-card .label { font-size: 13px; color: #64748b; margin-top: 4px; }
+    .chart-container { width: 100%; height: calc(100% - 40px); }
+    .disease-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      height: calc(100% - 40px);
+      overflow-y: auto;
+    }
+    .disease-item {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      border-left: 3px solid #2563eb;
+    }
+    .disease-item .name { font-size: 12px; font-weight: 500; }
+    .disease-item .stats { font-size: 11px; margin-top: 6px; display: flex; justify-content: space-between; }
+    .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .detail-card { background: #f8fafc; border-radius: 8px; padding: 12px; }
+    .detail-card .title { font-size: 11px; color: #64748b; }
+    .detail-card .value { font-size: 18px; font-weight: 600; margin-top: 4px; }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: white;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 800px;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 20px;
+    }
+    .modal-header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+    .modal-close { width: 32px; height: 32px; border: none; background: #f8fafc; border-radius: 50%; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+    <header class="header">
+      <h1>健康宣教系统数据大屏</h1>
+      <div id="currentTime"></div>
+    </header>
+
+    <section class="card stat-card" style="grid-column:1/4">
+      <div class="number" id="totalPush"></div>
+      <div class="label">累计推送次数</div>
+    </section>
+    <section class="card stat-card" style="grid-column:4/7">
+      <div class="number" id="todayPush">56</div>
+      <div class="label">今日推送次数</div>
+    </section>
+    <section class="card stat-card" style="grid-column:7/10">
+      <div class="number" id="totalView"></div>
+      <div class="label">累计查看次数</div>
+    </section>
+    <section class="card stat-card" style="grid-column:10/13">
+      <div class="number" id="overallRate"></div>
+      <div class="label">综合查看率</div>
+    </section>
+
+    <article class="card" style="grid-column:1/7;grid-row:3/5">
+      <div class="card-header"><div class="card-title">病种推送与查看对比</div><span class="card-action" onclick="openDetail('chart')">查看详情</span></div>
+      <div id="mainChart" class="chart-container"></div>
+    </article>
+    <article class="card" style="grid-column:7/10;grid-row:3/5">
+      <div class="card-header"><div class="card-title">病种详情</div><span class="card-action" onclick="openDetail('diseases')">查看全部</span></div>
+      <div class="disease-grid" id="diseaseGrid"></div>
+    </article>
+    <article class="card" style="grid-column:10/13;grid-row:3/5">
+      <div class="card-header"><div class="card-title">数据概览</div></div>
+      <div class="detail-grid">
+        <div class="detail-card"><div class="title">推送任务数</div><div class="value">27</div></div>
+        <div class="detail-card"><div class="title">平均查看率</div><div class="value" style="color:#2563eb" id="avgRate"></div></div>
+        <div class="detail-card"><div class="title">活跃用户</div><div class="value">1,258</div></div>
+        <div class="detail-card"><div class="title">内容覆盖率</div><div class="value" style="color:#16a34a">92%</div></div>
+      </div>
+    </article>
+
+    <article class="card" style="grid-column:1/7;grid-row:5/6">
+      <div class="card-header"><div class="card-title">近7天推送趋势</div><span class="card-action" onclick="openDetail('trend')">查看详情</span></div>
+      <div id="trendChart" class="chart-container"></div>
+    </article>
+    <article class="card" style="grid-column:7/10;grid-row:5/6">
+      <div class="card-header"><div class="card-title">推送分布</div><span class="card-action" onclick="openDetail('pie')">查看详情</span></div>
+      <div id="pieChart" class="chart-container"></div>
+    </article>
+    <article class="card" style="grid-column:10/13;grid-row:5/6">
+      <div class="card-header"><div class="card-title">查看率排行</div><span class="card-action" onclick="openDetail('ranking')">查看详情</span></div>
+      <div id="rateChart" class="chart-container"></div>
+    </article>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <div class="modal-header"><h2 id="modalTitle">详情</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script>
+    function updateTime() {
+      document.getElementById('currentTime').textContent = new Date().toLocaleString('zh-CN');
+    }
+    setInterval(updateTime, 1000);
+    updateTime();
+
+    var diseases = ['屈光手术', '糖尿病', '炎症性肠病', '消化性溃疡', '胃镜', '肠镜', '胃炎', '胃肠镜', '幽门'];
+    var pushData = [312, 517, 208, 193, 207, 483, 196, 214, 418];
+    var viewData = [187, 388, 94, 101, 114, 266, 127, 118, 293];
+
+    var totalPush = pushData.reduce(function(a,b){return a+b;});
+    var totalView = viewData.reduce(function(a,b){return a+b;});
+    var overallRate = ((totalView/totalPush)*100).toFixed(1);
+
+    document.getElementById('totalPush').textContent = totalPush.toLocaleString();
+    document.getElementById('totalView').textContent = totalView.toLocaleString();
+    document.getElementById('overallRate').textContent = overallRate + '%';
+    document.getElementById('avgRate').textContent = overallRate + '%';
+
+    var viewRates = [];
+    for(var i=0; i<viewData.length; i++) {
+      viewRates.push(((viewData[i]/pushData[i])*100).toFixed(1));
+    }
+
+    var diseaseGrid = document.getElementById('diseaseGrid');
+    var diseaseHTML = '';
+    for(var i=0; i<diseases.length; i++) {
+      diseaseHTML += '<div class="disease-item" onclick="openDiseaseDetail(\'' + diseases[i] + '\', ' + i + ')">';
+      diseaseHTML += '<div class="name">' + diseases[i] + '</div>';
+      diseaseHTML += '<div class="stats"><span style="color:#16a34a">推送:' + pushData[i] + '</span><span style="color:#ca8a04">查看:' + viewData[i] + '</span></div>';
+      diseaseHTML += '</div>';
+    }
+    diseaseGrid.innerHTML = diseaseHTML;
+
+    echarts.init(document.getElementById('mainChart')).setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['推送次数', '查看次数'], top: 0, right: 0 },
+      grid: { left: 40, right: 20, top: 30, bottom: 40 },
+      xAxis: { type: 'category', data: diseases, axisLabel: { rotate: 25, fontSize: 11 } },
+      yAxis: { type: 'value' },
+      series: [
+        { name: '推送次数', type: 'bar', data: pushData, itemStyle: { color: '#2563eb' } },
+        { name: '查看次数', type: 'bar', data: viewData, itemStyle: { color: '#16a34a' } }
+      ]
+    });
+
+    echarts.init(document.getElementById('pieChart')).setOption({
+      tooltip: { trigger: 'item' },
+      series: [{ type: 'pie', radius: ['45%', '75%'], data: diseases.map(function(n,i) { return { value: pushData[i], name: n }; }) }]
+    });
+
+    var trendPushData = [43,57,49,63,51,76,67];
+    var trendViewData = [27,35,31,39,33,47,41];
+    var trendPushSum = trendPushData.reduce(function(a,b){return a+b;});
+    var trendViewSum = trendViewData.reduce(function(a,b){return a+b;});
+
+    echarts.init(document.getElementById('trendChart')).setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['推送次数', '查看次数'], top: 0, right: 0 },
+      grid: { left: 40, right: 20, top: 30, bottom: 10 },
+      xAxis: { type: 'category', data: ['周一','周二','周三','周四','周五','周六','周日'] },
+      yAxis: { type: 'value' },
+      series: [
+        { name: '推送次数', type: 'line', smooth: true, data: trendPushData, lineStyle: { color: '#2563eb' } },
+        { name: '查看次数', type: 'line', smooth: true, data: trendViewData, lineStyle: { color: '#16a34a' } }
+      ]
+    });
+
+    echarts.init(document.getElementById('rateChart')).setOption({
+      tooltip: { trigger: 'axis' },
+      grid: { left: 60, right: 20, top: 10, bottom: 10 },
+      xAxis: { type: 'value', max: 100 },
+      yAxis: { type: 'category', data: diseases.slice().reverse() },
+      series: [{ name: '查看率', type: 'bar', data: viewRates.slice().reverse(), itemStyle: { color: '#f97316' } }]
+    });
+
+    var diseaseInfo = {
+      '屈光手术': { desc: '激光矫正近视、远视、散光', age: '18-45岁', risk: '中等' },
+      '糖尿病': { desc: '慢性代谢性疾病，需长期管理血糖', age: '40岁以上', risk: '高' },
+      '炎症性肠病': { desc: '包括克罗恩病和溃疡性结肠炎', age: '20-40岁', risk: '高' },
+      '消化性溃疡': { desc: '胃或十二指肠黏膜溃疡', age: '30-60岁', risk: '中等' },
+      '胃镜': { desc: '上消化道内镜检查', age: '40岁以上', risk: '低' },
+      '肠镜': { desc: '结肠内镜检查', age: '45岁以上', risk: '低' },
+      '胃炎': { desc: '胃黏膜炎症，分为急性和慢性', age: '30-60岁', risk: '低' },
+      '胃肠镜': { desc: '胃镜和肠镜联合检查', age: '40岁以上', risk: '低' },
+      '幽门': { desc: '幽门螺杆菌感染，可引起胃炎胃溃疡', age: '全年龄段', risk: '中等' }
+    };
+
+    function openDetail(type) {
+      var title = document.getElementById('modalTitle');
+      var body = document.getElementById('modalBody');
+      if(type == 'chart') {
+        title.textContent = '病种推送与查看详情';
+        body.innerHTML = '<h3>统计概览</h3><p>总推送: ' + totalPush + ' | 总查看: ' + totalView + ' | 平均查看率: ' + overallRate + '%</p>';
+      } else if(type == 'diseases') {
+        title.textContent = '所有病种详情';
+        body.innerHTML = '<h3>病种列表</h3>' + diseaseHTML;
+      } else if(type == 'trend') {
+        title.textContent = '近7天推送趋势';
+        body.innerHTML = '<h3>周数据汇总</h3><p>本周推送: ' + trendPushSum + ' | 本周查看: ' + trendViewSum + '</p>';
+      } else if(type == 'pie') {
+        title.textContent = '推送分布详情';
+        body.innerHTML = '<h3>分布明细</h3>' + diseases.map(function(n,i) { return '<p>' + n + ': ' + pushData[i] + '次</p>'; }).join('');
+      } else if(type == 'ranking') {
+        title.textContent = '查看率排行榜';
+        var sorted = diseases.map(function(n,i) { return {name:n, rate:parseFloat(viewRates[i])}; }).sort(function(a,b) { return b.rate - a.rate; });
+        body.innerHTML = '<h3>排行榜</h3>' + sorted.map(function(item,i) { return '<p>' + (i+1) + '. ' + item.name + ': ' + item.rate + '%</p>'; }).join('');
+      }
+      document.getElementById('modal').classList.add('active');
+    }
+
+    function openDiseaseDetail(name, index) {
+      var info = diseaseInfo[name];
+      document.getElementById('modalTitle').textContent = name + ' - 详情';
+      document.getElementById('modalBody').innerHTML = '<h3>基本信息</h3>' +
+        '<p>描述: ' + info.desc + '</p>' +
+        '<p>目标年龄段: ' + info.age + '</p>' +
+        '<p>风险等级: <span style="color:' + (info.risk=='高'?'#dc2626':info.risk=='中等'?'#f97316':'#16a34a') + '">' + info.risk + '</span></p>' +
+        '<h3>宣教数据</h3>' +
+        '<p>推送次数: ' + pushData[index] + '</p>' +
+        '<p>查看次数: ' + viewData[index] + '</p>' +
+        '<p>查看率: ' + viewRates[index] + '%</p>';
+      document.getElementById('modal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('modal').classList.remove('active');
+    }
+
+    document.getElementById('modal').addEventListener('click', function(e) {
+      if(e.target.classList.contains('modal')) closeModal();
+    });
+  </script>
+</body>
+</html>
