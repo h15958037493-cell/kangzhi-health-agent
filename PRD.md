@@ -2,11 +2,9 @@
 
 | 字段 | 内容 |
 |------|------|
-| 文档版本 | v1.0 |
+| 文档版本 | v1.1 |
 | 状态 | 评审中 |
-| 作者 | AI 辅助 |
 | 创建日期 | 2026-05-25 |
-| 最后更新 | 2026-05-25 |
 | 评审人 | - |
 
 ---
@@ -15,22 +13,15 @@
 
 ### 1.1 问题背景
 
-衢州市人民医院健康宣教系统已上线运营，覆盖屈光手术、糖尿病、炎症性肠病、消化性溃疡、胃镜、肠镜、胃炎、胃肠镜、幽门共 9 个病种的科普内容。目前系统缺乏统一的数据可视化平台，运营人员无法直观掌握各病种的推送效果和用户查看情况，难以评估宣教成效和优化资源配置。
+健康宣教系统已在多家医院上线运营，每个医院独立配置自身的病种科普内容（如屈光手术、糖尿病、消化性溃疡等）。目前缺乏统一的数据可视化平台，运营人员无法直观掌握各医院各病种的推送效果和用户查看情况，难以评估宣教成效和优化资源配置。
 
 ### 1.2 产品目标
 
-- **用户目标**：为医院健康宣教运营人员提供直观、高效的数据查看工具，实时掌握推送与查看动态
-- **业务目标**：通过数据大屏集中展示真实推送/查看数据，辅助运营决策，优化推送策略
-- **本次范围**：开发健康宣教系统数据大屏 Web 页面，接入真实后端数据，支持实时数据刷新
+- **用户目标**：为健康宣教运营人员提供多医院数据查看工具，支持切换医院查看对应数据，实时掌握推送与查看动态
+- **业务目标**：通过数据大屏集中展示真实推送/查看数据，支持按医院隔离数据，辅助运营决策
+- **本次范围**：开发健康宣教系统数据大屏 Web 页面，接入真实后端数据，支持多医院切换、病种按医院隔离、从规则库动态获取
 
-### 1.3 成功指标
-
-| 指标 | 目标值 | 测量方式 |
-|------|--------|---------|
-| 页面首次加载 | < 3s | 浏览器开发者工具 Network |
-| 数据刷新延迟 | < 5s | 页面时间戳与数据库时间差 |
-| 数据准确性 | 100% | 与数据库实时数据一致 |
-| 9 个病种数据完整展示 | 100% | 页面截图核查 |
+### 1.3 成功指标（待定）
 
 ---
 
@@ -38,11 +29,11 @@
 
 ### 2.1 目标用户
 
-**主要用户**：衢州市人民医院健康宣教运营人员、科室负责人
+**主要用户**：健康宣教运营人员、科室负责人
 
 **用户画像**：
 - 角色：医院宣教科室工作人员
-- 使用场景：每日晨会数据查看、周报数据汇报、日常运营监控
+- 使用场景：每日晨会数据查看、周报数据汇报、日常运营监控、多院区数据对比
 - 技术熟练度：一般
 
 ### 2.2 用户痛点与解法
@@ -60,97 +51,111 @@
 
 ### 3.1 功能概览
 
-数据大屏以 Web 单页面形式呈现，通过 ECharts 图表库实现数据可视化，从后端 API 实时拉取 9 个病种的真实推送次数、查看次数、查看率等核心指标，支持点击查看详情。页面顶部展示汇总统计，下方分为左右两区展示各类图表。
+数据大屏以 Web 单页面形式呈现，通过 ECharts 图表库实现数据可视化。页面顶部支持医院切换器，切换后加载对应医院的病种数据。病种从后端规则库动态获取，不同医院可配置不同病种。每个图表数据均按选中医院隔离展示。
+
+**核心业务流程**：
+1. 用户进入大屏页面 → 系统加载医院列表 → 用户选择医院
+2. 系统根据选中医院调用 `/api/dashboard/hospitals/{hospital_id}/diseases` 获取该医院病种列表
+3. 系统调用 `/api/dashboard/hospitals/{hospital_id}/summary` 获取该医院汇总数据
+4. 各图表组件根据病种数据渲染，每 30 秒自动刷新
 
 ---
 
-### 3.2 功能模块：顶部统计卡片
+### 3.2 功能模块：医院切换器
 
-**描述**：页面顶部 4 个统计卡片，实时展示从后端获取的汇总数据
+**描述**：页面顶部左侧医院切换下拉框，支持在多个医院之间切换
 
 **主流程**：
-1. 页面加载时，调用 `/api/dashboard/summary` 获取汇总数据
-2. 渲染累计推送次数、今日推送次数、累计查看次数、综合查看率
-3. 每 30 秒自动刷新一次数据，或支持手动刷新
+1. 页面加载时，调用 `/api/hospitals` 获取当前用户有权限访问的医院列表
+2. 默认选中第一个医院（或上次访问的医院）
+3. 用户切换医院时，清空当前图表数据，加载新医院数据
 
 **数据字段**：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| total_push_count | Integer | 累计推送次数（所有病种之和） |
-| today_push_count | Integer | 今日推送次数 |
-| total_view_count | Integer | 累计查看次数（所有病种之和） |
-| overall_view_rate | Float | 综合查看率（百分比，保留1位小数） |
+| hospital_id | String | 医院唯一标识 |
+| hospital_name | String | 医院名称 |
+| hospital_code | String | 医院编码 |
+
+**交互规则**：
+- 医院切换后，所有图表数据立即刷新，显示新医院数据
+- 切换过程中显示 Loading 状态
+- 医院列表包含"全部医院"选项，选择后展示所有医院的汇总数据（不含病种隔离）
+
+---
+
+### 3.3 功能模块：顶部统计卡片
+
+**描述**：页面顶部 4 个统计卡片，实时展示从后端获取的当前选中医院的汇总数据
+
+**主流程**：
+1. 用户选择医院后，调用 `/api/dashboard/hospitals/{hospital_id}/summary` 获取汇总数据
+2. 渲染累计推送次数、今日推送次数、累计查看次数、综合查看率
+3. 每 30 秒自动刷新一次数据
+
+**数据字段**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| total_push_count | Integer | 该医院累计推送次数（所有病种之和） |
+| today_push_count | Integer | 该医院今日推送次数 |
+| total_view_count | Integer | 该医院累计查看次数（所有病种之和） |
+| overall_view_rate | Float | 该医院综合查看率（百分比，保留1位小数） |
 | update_time | String | 数据更新时间（ISO 8601 格式） |
 
 **业务规则**：
 - 综合查看率 = 累计查看次数 / 累计推送次数 × 100%
 - 数据为空时显示 "--"
-- 网络异常时显示上次缓存数据 + "数据更新于 X 分钟前" 提示
-
-**验收标准（AC）**：
-- [ ] AC1：Given 页面加载且网络正常，Then 4 个统计卡片显示后端真实数据
-- [ ] AC2：Given 数据加载中，Then 卡片区域显示骨架屏或 Loading 状态
-- [ ] AC3：Given 网络异常，Then 显示上次缓存数据及更新时间
 
 ---
 
-### 3.3 功能模块：病种推送与查看对比柱状图
+### 3.4 功能模块：病种推送与查看对比柱状图
 
-**描述**：展示 9 个病种的推送次数与查看次数对比柱状图，数据来源于后端
+**描述**：展示当前医院配置的病种的推送次数与查看次数对比柱状图，病种从该医院的规则库动态获取
 
 **主流程**：
-1. 页面加载时，调用 `/api/dashboard/diseases` 获取各病种数据
+1. 用户选择医院后，调用 `/api/dashboard/hospitals/{hospital_id}/diseases` 获取该医院病种数据
 2. 蓝色柱子表示推送次数，绿色柱子表示查看次数
-3. X 轴为 9 个病种名称，Y 轴为次数
+3. X 轴为该医院配置的病种名称，Y 轴为次数
 4. 每 30 秒自动刷新
 
 **数据字段**：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| disease_id | String | 病种唯一标识 |
-| disease_name | String | 病种名称（不含"衢州"前缀） |
-| push_count | Integer | 累计推送次数 |
-| view_count | Integer | 累计查看次数 |
+| disease_id | String | 病种唯一标识（与医院绑定） |
+| disease_name | String | 病种名称 |
+| push_count | Integer | 该医院该病种累计推送次数 |
+| view_count | Integer | 该医院该病种累计查看次数 |
 | view_rate | Float | 查看率（百分比，保留1位小数） |
-
-**验收标准（AC）**：
-- [ ] AC1：Given 图表加载，Then 9 个病种的推送和查看柱状图正确显示
-- [ ] AC2：Given 鼠标悬停，Then 显示具体数值 tooltip（病种名、推送数、查看数、查看率）
-- [ ] AC3：Given 点击柱状图，Then 跳转至该病种详情页
 
 ---
 
-### 3.4 功能模块：病种详情网格
+### 3.5 功能模块：病种详情网格
 
-**描述**：右侧 9 个病种卡片网格，支持点击查看单个病种详情
+**描述**：右侧病种卡片网格，支持点击查看单个病种详情。病种列表从当前医院的规则库动态获取。
 
 **主流程**：
-1. 页面加载时，调用 `/api/dashboard/diseases` 获取病种列表
+1. 用户选择医院后，调用 `/api/dashboard/hospitals/{hospital_id}/diseases` 获取该医院病种列表
 2. 每个卡片显示病种名称、推送次数、查看次数
-3. 点击任意卡片，调用 `/api/dashboard/disease/{id}` 获取详情并弹窗
+3. 点击任意卡片，调用 `/api/dashboard/hospitals/{hospital_id}/diseases/{disease_id}` 获取详情并弹窗
 
 **异常流程**：
 
 | 异常情况 | 系统行为 | 用户提示文案 |
 |---------|---------|------------|
-| 病种数据为空 | 显示 "暂无病种数据" | "暂无数据" |
+| 该医院无配置病种 | 显示 "该医院暂未配置病种" | "暂无数据" |
 | 单病种详情加载失败 | 弹窗显示错误信息 | "数据加载失败，请稍后重试" |
-
-**验收标准（AC）**：
-- [ ] AC1：Given 页面加载，Then 9 个病种卡片完整渲染
-- [ ] AC2：Given 点击病种卡片，Then 显示该病种详情弹窗（基本信息 + 宣教数据）
-- [ ] AC3：Given 弹窗打开，Then 显示风险等级（高/中/低，颜色区分）
 
 ---
 
-### 3.5 功能模块：近 7 天推送趋势折线图
+### 3.6 功能模块：近 7 天推送趋势折线图
 
-**描述**：展示最近 7 天的推送和查看趋势，数据来源于后端
+**描述**：展示最近 7 天的推送和查看趋势，数据来源于后端当前医院
 
 **主流程**：
-1. 页面加载时，调用 `/api/dashboard/trend?days=7` 获取近 7 天趋势数据
+1. 用户选择医院后，调用 `/api/dashboard/hospitals/{hospital_id}/trend?days=7` 获取近 7 天趋势数据
 2. 蓝色折线表示推送，绿色折线表示查看
 3. X 轴为周一至周日，Y 轴为次数
 
@@ -159,77 +164,57 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | date | String | 日期（YYYY-MM-DD） |
-| push_count | Integer | 当日推送次数 |
-| view_count | Integer | 当日查看次数 |
-
-**验收标准（AC）**：
-- [ ] AC1：Given 图表加载，Then 7 天趋势折线图正确显示
-- [ ] AC2：Given 鼠标悬停，Then 显示当日推送数、查看数
-- [ ] AC3：Given 点击"查看详情"，Then 弹出周汇总弹窗
+| push_count | Integer | 当日该医院推送次数 |
+| view_count | Integer | 当日该医院查看次数 |
 
 ---
 
-### 3.6 功能模块：推送分布饼图
+### 3.7 功能模块：推送分布饼图
 
-**描述**：展示 9 个病种在总推送中的占比分布，数据来源于后端
+**描述**：展示当前医院各病种在总推送中的占比分布
 
 **主流程**：
-1. 页面加载时，调用 `/api/dashboard/distribution` 获取推送分布
+1. 用户选择医院后，调用 `/api/dashboard/hospitals/{hospital_id}/distribution` 获取推送分布
 2. 使用环形饼图（内半径 45%，外半径 75%）
 3. 每个扇区显示病种名称和推送次数
-4. 鼠标悬停显示具体数值和占比
 
 **数据字段**：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | disease_name | String | 病种名称 |
-| push_count | Integer | 该病种累计推送次数 |
+| push_count | Integer | 该医院该病种累计推送次数 |
 | push_ratio | Float | 占比（百分比，保留1位小数） |
 
-**验收标准（AC）**：
-- [ ] AC1：Given 图表加载，Then 饼图展示 9 个扇区，占比合计 100%
-- [ ] AC2：Given 鼠标悬停，Then 显示病种名、推送数、占比
-
 ---
 
-### 3.7 功能模块：查看率排行横向条形图
+### 3.8 功能模块：查看率排行横向条形图
 
-**描述**：按查看率从低到高排序展示各病种，数据来源于后端
+**描述**：按查看率从低到高排序展示当前医院的各病种
 
 **主流程**：
-1. 页面加载时，基于 `/api/dashboard/diseases` 返回数据计算查看率
+1. 用户选择医院后，基于 `/api/dashboard/hospitals/{hospital_id}/diseases` 返回数据计算查看率
 2. Y 轴为病种名称（倒序排列），X 轴为查看率百分比
 3. 橙色柱状图，最大值 100%
-4. 鼠标悬停显示具体查看率
-
-**验收标准（AC）**：
-- [ ] AC1：Given 图表加载，Then 横向条形图按查看率升序排列
-- [ ] AC2：Given 鼠标悬停，Then 显示病种名和具体查看率
 
 ---
 
-### 3.8 功能模块：详情弹窗
+### 3.9 功能模块：详情弹窗
 
 **描述**：点击各模块"查看详情"或病种卡片时，弹出模态框展示详细信息
 
 **弹窗类型**：
-1. **病种推送与查看详情**：调用 `/api/dashboard/summary`，展示总推送/总查看/平均查看率
-2. **所有病种详情**：调用 `/api/dashboard/diseases`，展示 9 个病种列表（可点击）
-3. **近 7 天趋势详情**：调用 `/api/dashboard/trend?days=7`，展示周汇总
-4. **推送分布详情**：调用 `/api/dashboard/distribution`，展示各病种明细
-5. **查看率排行榜**：基于 `/api/dashboard/diseases` 排序展示
-6. **单个病种详情**：调用 `/api/dashboard/disease/{id}`，展示基本信息 + 宣教数据
+1. **病种推送与查看详情**：调用 `/api/dashboard/hospitals/{hospital_id}/summary`，展示该医院总推送/总查看/平均查看率
+2. **所有病种详情**：调用 `/api/dashboard/hospitals/{hospital_id}/diseases`，展示该医院病种列表（可点击）
+3. **近 7 天趋势详情**：调用 `/api/dashboard/hospitals/{hospital_id}/trend?days=7`，展示周汇总
+4. **推送分布详情**：调用 `/api/dashboard/hospitals/{hospital_id}/distribution`，展示各病种明细
+5. **查看率排行榜**：基于 `/api/dashboard/hospitals/{hospital_id}/diseases` 排序展示
+6. **单个病种详情**：调用 `/api/dashboard/hospitals/{hospital_id}/diseases/{disease_id}`，展示该医院该病种基本信息 + 宣教数据
 
 **交互规则**：
 - 点击遮罩层可关闭弹窗
 - 点击关闭按钮可关闭弹窗
 - 弹窗宽度最大 800px，高度最大 80vh，超出可滚动
-
-**验收标准（AC）**：
-- [ ] AC1：Given 点击"查看详情"，Then 弹窗立即显示，数据从后端加载
-- [ ] AC2：Given 弹窗数据加载中，Then 显示 Loading 状态
-- [ ] AC3：Given 点击遮罩或关闭按钮，Then 弹窗关闭
 
 ---
 
@@ -243,16 +228,46 @@
 
 ### 4.2 后端数据埋点（推送与查看记录）
 
-健康宣教系统后端需记录每次推送和查看行为，作为大屏数据的源头。
+健康宣教系统后端需记录每次推送和查看行为，作为大屏数据的源头。病种与医院绑定，推送和查看记录均需关联医院 ID。
 
-#### 4.2.1 推送记录表（push_log）
+#### 4.2.1 医院信息表（hospital）
 
-每次向用户推送宣教内容时，记录一条推送日志：
+| 字段名 | 数据类型 | 说明 | 示例 |
+|--------|---------|------|------|
+| id | BigInt | 主键 | 1 |
+| hospital_id | String | 医院唯一标识 | H001 |
+| hospital_name | String | 医院名称 | 衢州市人民医院 |
+| hospital_code | String | 医院编码 | QZRMYY |
+| created_at | DateTime | 创建时间 | 2026-01-01 00:00:00 |
+
+#### 4.2.2 病种规则配置表（disease_rule）
+
+每个医院独立配置自己的病种规则，病种与医院绑定：
+
+| 字段名 | 数据类型 | 说明 | 示例 |
+|--------|---------|------|------|
+| id | BigInt | 主键 | 1 |
+| hospital_id | String | 所属医院 ID | H001 |
+| disease_id | String | 病种 ID | diabetes |
+| disease_name | String | 病种名称 | 糖尿病 |
+| description | String | 病种描述 | 糖尿病健康宣教内容 |
+| target_age | String | 目标年龄段 | 35-70岁 |
+| risk_level | String | 风险等级 | 高/中/低 |
+| push_rule_count | Int | 推送规则数量 | 5 |
+| department | String | 所属科室 | 内分泌科 |
+| status | String | 状态 | enabled/disabled |
+| created_at | DateTime | 创建时间 | 2026-01-01 00:00:00 |
+| updated_at | DateTime | 更新时间 | 2026-05-25 10:00:00 |
+
+#### 4.2.3 推送记录表（push_log）
+
+每次向用户推送宣教内容时，记录一条推送日志，按医院隔离：
 
 | 字段名 | 数据类型 | 说明 | 示例 |
 |--------|---------|------|------|
 | id | BigInt | 主键 | 100001 |
-| disease_id | String | 病种 ID | diabetes |
+| hospital_id | String | 医院 ID | H001 |
+| disease_id | String | 病种 ID（关联 disease_rule） | diabetes |
 | disease_name | String | 病种名称 | 糖尿病 |
 | user_id | String | 推送目标用户 ID | U123456 |
 | push_time | DateTime | 推送时间 | 2026-05-25 10:30:00 |
@@ -261,14 +276,15 @@
 | push_status | String | 推送状态 | success/failed |
 | created_at | DateTime | 记录创建时间 | 2026-05-25 10:30:01 |
 
-#### 4.2.2 查看记录表（view_log）
+#### 4.2.4 查看记录表（view_log）
 
-每次用户点击查看宣教内容时，记录一条查看日志：
+每次用户点击查看宣教内容时，记录一条查看日志，按医院隔离：
 
 | 字段名 | 数据类型 | 说明 | 示例 |
 |--------|---------|------|------|
 | id | BigInt | 主键 | 200001 |
-| disease_id | String | 病种 ID | diabetes |
+| hospital_id | String | 医院 ID | H001 |
+| disease_id | String | 病种 ID（关联 disease_rule） | diabetes |
 | disease_name | String | 病种名称 | 糖尿病 |
 | user_id | String | 查看用户 ID | U123456 |
 | view_time | DateTime | 查看时间 | 2026-05-25 10:35:22 |
@@ -281,11 +297,11 @@
 
 ### 4.3 后端数据聚合 API
 
-大屏前端通过调用后端 API 获取聚合数据，后端基于 push_log 和 view_log 表进行统计计算。
+大屏前端通过调用后端 API 获取聚合数据，后端基于 push_log 和 view_log 表进行统计计算。所有 API 均按医院隔离数据。
 
-#### 4.3.1 汇总数据接口
+#### 4.3.1 医院列表接口
 
-**接口路径**：`GET /api/dashboard/summary`
+**接口路径**：`GET /api/hospitals`
 
 **请求参数**：无
 
@@ -293,41 +309,55 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| total_push_count | Integer | 累计推送次数 |
-| today_push_count | Integer | 今日推送次数 |
-| total_view_count | Integer | 累计查看次数 |
-| overall_view_rate | Float | 综合查看率 |
+| hospital_id | String | 医院唯一标识 |
+| hospital_name | String | 医院名称 |
+
+#### 4.3.2 医院汇总数据接口
+
+**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/summary`
+
+**路径参数**：`hospital_id` - 医院 ID
+
+**响应字段**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| hospital_id | String | 医院 ID |
+| hospital_name | String | 医院名称 |
+| total_push_count | Integer | 该医院累计推送次数 |
+| today_push_count | Integer | 该医院今日推送次数 |
+| total_view_count | Integer | 该医院累计查看次数 |
+| overall_view_rate | Float | 该医院综合查看率 |
+| disease_count | Integer | 该医院配置的病种数量 |
 | update_time | String | 数据更新时间 |
 
 **SQL 计算逻辑**：
 ```sql
 SELECT
-  COUNT(DISTINCT id) as total_push_count,
-  COUNT(DISTINCT CASE WHEN DATE(push_time) = CURDATE() THEN id END) as today_push_count
-FROM push_log
-WHERE push_status = 'success';
+  p.hospital_id,
+  COUNT(DISTINCT p.id) as total_push_count,
+  COUNT(DISTINCT CASE WHEN DATE(p.push_time) = CURDATE() THEN p.id END) as today_push_count,
+  COUNT(DISTINCT v.id) as total_view_count
+FROM push_log p
+LEFT JOIN view_log v ON p.hospital_id = v.hospital_id
+WHERE p.hospital_id = :hospital_id AND p.push_status = 'success'
+GROUP BY p.hospital_id;
 ```
 
-```sql
-SELECT
-  COUNT(DISTINCT id) as total_view_count
-FROM view_log;
-```
+#### 4.3.3 医院病种列表接口
 
-#### 4.3.2 病种列表接口
+**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/diseases`
 
-**接口路径**：`GET /api/dashboard/diseases`
-
-**请求参数**：无
+**路径参数**：`hospital_id` - 医院 ID
 
 **响应字段**：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | disease_id | String | 病种 ID |
-| disease_name | String | 病种名称（不含"衢州"） |
-| push_count | Integer | 累计推送次数 |
-| view_count | Integer | 累计查看次数 |
+| disease_name | String | 病种名称 |
+| push_count | Integer | 该医院该病种累计推送次数 |
+| view_count | Integer | 该医院该病种累计查看次数 |
 | view_rate | Float | 查看率（百分比） |
 
 **SQL 计算逻辑**：
@@ -339,16 +369,19 @@ SELECT
   COUNT(DISTINCT v.id) as view_count,
   ROUND(COUNT(DISTINCT v.id) / COUNT(DISTINCT p.id) * 100, 1) as view_rate
 FROM push_log p
-LEFT JOIN view_log v ON p.disease_id = v.disease_id
+LEFT JOIN view_log v ON p.disease_id = v.disease_id AND p.hospital_id = v.hospital_id
+WHERE p.hospital_id = :hospital_id
 GROUP BY p.disease_id, p.disease_name
 ORDER BY push_count DESC;
 ```
 
-#### 4.3.3 单病种详情接口
+#### 4.3.4 医院病种详情接口
 
-**接口路径**：`GET /api/dashboard/disease/{disease_id}`
+**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/diseases/{disease_id}`
 
-**路径参数**：`disease_id` - 病种 ID
+**路径参数**：
+- `hospital_id` - 医院 ID
+- `disease_id` - 病种 ID
 
 **响应字段**：
 
@@ -359,15 +392,17 @@ ORDER BY push_count DESC;
 | description | String | 病种描述 |
 | target_age | String | 目标年龄段 |
 | risk_level | String | 风险等级（高/中/低） |
-| push_count | Integer | 累计推送次数 |
-| view_count | Integer | 累计查看次数 |
+| push_count | Integer | 该医院该病种累计推送次数 |
+| view_count | Integer | 该医院该病种累计查看次数 |
 | view_rate | Float | 查看率 |
 | push_rule_count | Integer | 推送规则数量 |
 | department | String | 所属科室 |
 
-#### 4.3.4 近 7 天趋势接口
+#### 4.3.5 医院近 7 天趋势接口
 
-**接口路径**：`GET /api/dashboard/trend`
+**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/trend`
+
+**路径参数**：`hospital_id` - 医院 ID
 
 **请求参数**：
 
@@ -380,8 +415,8 @@ ORDER BY push_count DESC;
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | date | String | 日期（YYYY-MM-DD） |
-| push_count | Integer | 当日推送次数 |
-| view_count | Integer | 当日查看次数 |
+| push_count | Integer | 当日该医院推送次数 |
+| view_count | Integer | 当日该医院查看次数 |
 
 **SQL 计算逻辑**：
 ```sql
@@ -390,17 +425,17 @@ SELECT
   COUNT(DISTINCT p.id) as push_count,
   COUNT(DISTINCT v.id) as view_count
 FROM push_log p
-LEFT JOIN view_log v ON DATE(p.push_time) = DATE(v.view_time) AND p.disease_id = v.disease_id
-WHERE p.push_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+LEFT JOIN view_log v ON DATE(p.push_time) = DATE(v.view_time) AND p.disease_id = v.disease_id AND p.hospital_id = v.hospital_id
+WHERE p.hospital_id = :hospital_id AND p.push_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
 GROUP BY DATE(p.push_time)
 ORDER BY date ASC;
 ```
 
-#### 4.3.5 推送分布接口
+#### 4.3.6 医院推送分布接口
 
-**接口路径**：`GET /api/dashboard/distribution`
+**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/distribution`
 
-**请求参数**：无
+**路径参数**：`hospital_id` - 医院 ID
 
 **响应字段**：
 
@@ -408,7 +443,7 @@ ORDER BY date ASC;
 |------|------|------|
 | disease_id | String | 病种 ID |
 | disease_name | String | 病种名称 |
-| push_count | Integer | 累计推送次数 |
+| push_count | Integer | 该医院该病种累计推送次数 |
 | push_ratio | Float | 占比（百分比） |
 
 ---
@@ -513,16 +548,14 @@ ORDER BY date ASC;
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│                      健康宣教系统数据大屏                    │
-│                        最后更新: 10:30:00  🔄              │
+│  衢州市人民医院 ▼  │    健康宣教系统数据大屏    │  最后更新: 10:30:00  🔄  │
 ├──────────┬──────────┬──────────┬──────────────────────────┤
 │ 累计推送  │ 今日推送  │ 累计查看  │        综合查看率          │
 │  2,748   │    56    │  1,688   │         61.4%            │
 ├─────────────────────────┬────────────┬────────────────────┤
 │  病种推送与查看对比      │  病种详情   │     数据概览         │
-│      (柱状图)           │  (网格)    │  推送任务数: 27       │
+│      (柱状图)           │  (网格)    │  病种数量: 9         │
 │                        │            │  平均查看率: 61.4%    │
-│                        │            │  活跃用户:  1,258    │
 ├─────────────────────────┴────────────┴────────────────────┤
 │   近7天推送趋势    │    推送分布     │     查看率排行        │
 │    (折线图)       │    (饼图)      │    (横向条形图)       │
@@ -554,17 +587,18 @@ ORDER BY date ASC;
 ## 8. 迭代规划
 
 ### MVP（本期 v1.0）
-- [ ] 顶部 4 个统计卡片（实时数据）
-- [ ] 病种推送与查看对比柱状图
+- [ ] 医院切换功能
+- [ ] 顶部 4 个统计卡片（实时数据，按医院隔离）
+- [ ] 病种推送与查看对比柱状图（病种从规则库动态获取）
 - [ ] 病种详情网格（可点击）
-- [ ] 近 7 天推送趋势折线图
-- [ ] 推送分布饼图
-- [ ] 查看率排行横向条形图
+- [ ] 近 7 天推送趋势折线图（按医院隔离）
+- [ ] 推送分布饼图（按医院隔离）
+- [ ] 查看率排行横向条形图（按医院隔离）
 - [ ] 详情弹窗功能
 - [ ] 浅色系 UI 设计
 - [ ] 前端行为埋点
-- [ ] 后端 API 接口开发
-- [ ] 数据库表设计（push_log、view_log）
+- [ ] 后端 API 接口开发（按医院隔离）
+- [ ] 数据库表设计（hospital、disease_rule、push_log、view_log）
 
 ### 后续迭代
 
@@ -593,20 +627,22 @@ ORDER BY date ASC;
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/api/dashboard/summary` | GET | 汇总数据 |
-| `/api/dashboard/diseases` | GET | 病种列表 |
-| `/api/dashboard/disease/{id}` | GET | 单病种详情 |
-| `/api/dashboard/trend` | GET | 趋势数据 |
-| `/api/dashboard/distribution` | GET | 推送分布 |
+| `/api/hospitals` | GET | 医院列表 |
+| `/api/dashboard/hospitals/{hospital_id}/summary` | GET | 医院汇总数据 |
+| `/api/dashboard/hospitals/{hospital_id}/diseases` | GET | 医院病种列表（从规则库获取） |
+| `/api/dashboard/hospitals/{hospital_id}/diseases/{disease_id}` | GET | 医院病种详情 |
+| `/api/dashboard/hospitals/{hospital_id}/trend` | GET | 医院趋势数据 |
+| `/api/dashboard/hospitals/{hospital_id}/distribution` | GET | 医院推送分布 |
 | `/api/analytics/event` | POST | 埋点上报 |
 
 ### 10.2 数据库表清单
 
 | 表名 | 说明 |
 |------|------|
-| push_log | 推送记录表 |
-| view_log | 查看记录表 |
-| disease_info | 病种基础信息表 |
+| hospital | 医院信息表 |
+| disease_rule | 病种规则配置表（病种与医院绑定） |
+| push_log | 推送记录表（按医院隔离） |
+| view_log | 查看记录表（按医院隔离） |
 
 ### 10.3 参考资料
 
