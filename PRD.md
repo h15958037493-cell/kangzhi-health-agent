@@ -21,49 +21,27 @@
 - **业务目标**：通过数据大屏集中展示真实推送/查看数据，支持按医院隔离数据，辅助运营决策
 - **本次范围**：开发健康宣教系统数据大屏 Web 页面，接入真实后端数据，支持多医院切换、病种按医院隔离、从规则库动态获取
 
-### 1.3 成功指标（待定）
 
----
 
 ## 2. 用户分析
 
-### 2.1 目标用户
-
-**主要用户**：健康宣教运营人员、科室负责人
-
-**用户画像**：
-- 角色：医院宣教科室工作人员
-- 使用场景：每日晨会数据查看、周报数据汇报、日常运营监控、多院区数据对比
-- 技术熟练度：一般
-
-### 2.2 用户痛点与解法
-
-| 痛点 | 当前解决方式 | 我们的解法 |
-|------|------------|----------|
-| 数据分散，无法集中查看 | 登录多个后台 | 数据大屏一处汇总 |
-| 推送效果无法直观对比 | 导出 Excel 手动分析 | 图表可视化对比 |
-| 查看率等指标需要手动计算 | 人工统计 | 自动实时计算展示 |
-| 无法快速了解详情 | 逐个进入后台 | 点击病种卡片弹出详情 |
-
----
 
 ## 3. 功能需求
 
 ### 3.1 功能概览
 
-数据大屏以 Web 单页面形式呈现，通过 ECharts 图表库实现数据可视化。页面顶部支持医院切换器，切换后加载对应医院的病种数据。病种从后端规则库动态获取，不同医院可配置不同病种。每个图表数据均按选中医院隔离展示。
+数据大屏以 Web 单页面形式呈现，通过 ECharts 图表库实现数据可视化。页面顶部支持医院切换器，切换后加载对应医院的病种数据。医院和病种从后端规则库动态获取，不同医院可配置不同病种。每个图表数据均按选中医院隔离展示。
 
 **核心业务流程**：
-1. 用户进入大屏页面 → 系统加载医院列表 → 用户选择医院
-2. 系统根据选中医院调用 `/api/dashboard/hospitals/{hospital_id}/diseases` 获取该医院病种列表
-3. 系统调用 `/api/dashboard/hospitals/{hospital_id}/summary` 获取该医院汇总数据
+1. 用户进入大屏页面 → 选择医院，未选择医院默认选择列表第一个
+2. 系统根据选中医院调用获取该医院病种列表，获取该医院汇总数据
 4. 各图表组件根据病种数据渲染，每 30 秒自动刷新
 
 ---
 
 ### 3.2 功能模块：医院切换器
 
-**描述**：页面顶部左侧医院切换下拉框，支持在多个医院之间切换
+**描述**：页面顶部侧医院切换下拉框，支持在多个医院之间切换
 
 **主流程**：
 1. 页面加载时，调用 `/api/hospitals` 获取当前用户有权限访问的医院列表
@@ -295,156 +273,18 @@
 
 ---
 
-### 4.3 后端数据聚合 API
+### 4.3 数据交互说明
 
-大屏前端通过调用后端 API 获取聚合数据，后端基于 push_log 和 view_log 表进行统计计算。所有 API 均按医院隔离数据。
+前端通过调用后端 RESTful API 获取数据，具体接口设计由后端开发团队负责。接口需满足以下要求：
 
-#### 4.3.1 医院列表接口
+1. **医院列表接口**：返回当前用户有权限访问的医院列表
+2. **汇总数据接口**：返回指定医院的累计推送、今日推送、累计查看、综合查看率
+3. **病种列表接口**：从 disease_rule 表获取指定医院的病种配置列表
+4. **趋势数据接口**：返回指定医院近 N 天的推送和查看趋势
+5. **推送分布接口**：返回指定医院各病种的推送次数和占比
+6. **单病种详情接口**：返回指定医院指定病种的详细信息
 
-**接口路径**：`GET /api/hospitals`
-
-**请求参数**：无
-
-**响应字段**：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| hospital_id | String | 医院唯一标识 |
-| hospital_name | String | 医院名称 |
-
-#### 4.3.2 医院汇总数据接口
-
-**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/summary`
-
-**路径参数**：`hospital_id` - 医院 ID
-
-**响应字段**：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| hospital_id | String | 医院 ID |
-| hospital_name | String | 医院名称 |
-| total_push_count | Integer | 该医院累计推送次数 |
-| today_push_count | Integer | 该医院今日推送次数 |
-| total_view_count | Integer | 该医院累计查看次数 |
-| overall_view_rate | Float | 该医院综合查看率 |
-| disease_count | Integer | 该医院配置的病种数量 |
-| update_time | String | 数据更新时间 |
-
-**SQL 计算逻辑**：
-```sql
-SELECT
-  p.hospital_id,
-  COUNT(DISTINCT p.id) as total_push_count,
-  COUNT(DISTINCT CASE WHEN DATE(p.push_time) = CURDATE() THEN p.id END) as today_push_count,
-  COUNT(DISTINCT v.id) as total_view_count
-FROM push_log p
-LEFT JOIN view_log v ON p.hospital_id = v.hospital_id
-WHERE p.hospital_id = :hospital_id AND p.push_status = 'success'
-GROUP BY p.hospital_id;
-```
-
-#### 4.3.3 医院病种列表接口
-
-**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/diseases`
-
-**路径参数**：`hospital_id` - 医院 ID
-
-**响应字段**：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| disease_id | String | 病种 ID |
-| disease_name | String | 病种名称 |
-| push_count | Integer | 该医院该病种累计推送次数 |
-| view_count | Integer | 该医院该病种累计查看次数 |
-| view_rate | Float | 查看率（百分比） |
-
-**SQL 计算逻辑**：
-```sql
-SELECT
-  p.disease_id,
-  p.disease_name,
-  COUNT(DISTINCT p.id) as push_count,
-  COUNT(DISTINCT v.id) as view_count,
-  ROUND(COUNT(DISTINCT v.id) / COUNT(DISTINCT p.id) * 100, 1) as view_rate
-FROM push_log p
-LEFT JOIN view_log v ON p.disease_id = v.disease_id AND p.hospital_id = v.hospital_id
-WHERE p.hospital_id = :hospital_id
-GROUP BY p.disease_id, p.disease_name
-ORDER BY push_count DESC;
-```
-
-#### 4.3.4 医院病种详情接口
-
-**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/diseases/{disease_id}`
-
-**路径参数**：
-- `hospital_id` - 医院 ID
-- `disease_id` - 病种 ID
-
-**响应字段**：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| disease_id | String | 病种 ID |
-| disease_name | String | 病种名称 |
-| description | String | 病种描述 |
-| target_age | String | 目标年龄段 |
-| risk_level | String | 风险等级（高/中/低） |
-| push_count | Integer | 该医院该病种累计推送次数 |
-| view_count | Integer | 该医院该病种累计查看次数 |
-| view_rate | Float | 查看率 |
-| push_rule_count | Integer | 推送规则数量 |
-| department | String | 所属科室 |
-
-#### 4.3.5 医院近 7 天趋势接口
-
-**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/trend`
-
-**路径参数**：`hospital_id` - 医院 ID
-
-**请求参数**：
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| days | Integer | 否 | 查询天数，默认 7 |
-
-**响应字段**：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| date | String | 日期（YYYY-MM-DD） |
-| push_count | Integer | 当日该医院推送次数 |
-| view_count | Integer | 当日该医院查看次数 |
-
-**SQL 计算逻辑**：
-```sql
-SELECT
-  DATE(p.push_time) as date,
-  COUNT(DISTINCT p.id) as push_count,
-  COUNT(DISTINCT v.id) as view_count
-FROM push_log p
-LEFT JOIN view_log v ON DATE(p.push_time) = DATE(v.view_time) AND p.disease_id = v.disease_id AND p.hospital_id = v.hospital_id
-WHERE p.hospital_id = :hospital_id AND p.push_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-GROUP BY DATE(p.push_time)
-ORDER BY date ASC;
-```
-
-#### 4.3.6 医院推送分布接口
-
-**接口路径**：`GET /api/dashboard/hospitals/{hospital_id}/distribution`
-
-**路径参数**：`hospital_id` - 医院 ID
-
-**响应字段**：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| disease_id | String | 病种 ID |
-| disease_name | String | 病种名称 |
-| push_count | Integer | 该医院该病种累计推送次数 |
-| push_ratio | Float | 占比（百分比） |
+所有数据按 hospital_id 隔离，支持按医院筛选和切换。
 
 ---
 
@@ -623,17 +463,9 @@ ORDER BY date ASC;
 
 ## 10. 附录
 
-### 10.1 后端接口文档清单
+### 10.1 数据接口说明
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/hospitals` | GET | 医院列表 |
-| `/api/dashboard/hospitals/{hospital_id}/summary` | GET | 医院汇总数据 |
-| `/api/dashboard/hospitals/{hospital_id}/diseases` | GET | 医院病种列表（从规则库获取） |
-| `/api/dashboard/hospitals/{hospital_id}/diseases/{disease_id}` | GET | 医院病种详情 |
-| `/api/dashboard/hospitals/{hospital_id}/trend` | GET | 医院趋势数据 |
-| `/api/dashboard/hospitals/{hospital_id}/distribution` | GET | 医院推送分布 |
-| `/api/analytics/event` | POST | 埋点上报 |
+前端通过调用后端 RESTful API 获取数据，具体接口设计由后端开发团队负责。
 
 ### 10.2 数据库表清单
 

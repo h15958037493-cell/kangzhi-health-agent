@@ -30,6 +30,18 @@
       border: 1px solid #e2e8f0;
     }
     .header h1 { font-size: 20px; }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .hospital-select {
+      padding: 8px 32px 8px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+      appearance: none;
+      cursor: pointer;
+      min-width: 180px;
+    }
+    .hospital-select:focus { outline: none; border-color: #2563eb; }
     .card {
       background: white;
       border: 1px solid #e2e8f0;
@@ -98,7 +110,14 @@
 <body>
   <div class="dashboard">
     <header class="header">
-      <h1>健康宣教系统数据大屏</h1>
+      <div class="header-left">
+        <select class="hospital-select" id="hospitalSelect" onchange="onHospitalChange()">
+          <option value="H001">衢州市人民医院</option>
+          <option value="H002">柯城区人民医院</option>
+          <option value="H003">衢江区人民医院</option>
+        </select>
+        <h1>健康宣教系统数据大屏</h1>
+      </div>
       <div id="currentTime"></div>
     </header>
 
@@ -295,6 +314,45 @@
     var chartMain = echarts.getInstanceByDom(document.getElementById('mainChart'));
     var chartPie = echarts.getInstanceByDom(document.getElementById('pieChart'));
     var chartRate = echarts.getInstanceByDom(document.getElementById('rateChart'));
+
+    var hospitalData = {
+      'H001': { diseases: ['屈光手术', '糖尿病', '炎症性肠病', '消化性溃疡', '胃镜', '肠镜', '胃炎', '胃肠镜', '幽门'], pushData: [312, 517, 208, 193, 207, 483, 196, 214, 418], viewData: [187, 388, 94, 101, 114, 266, 127, 118, 293], trendData: [{push:43,view:27},{push:57,view:35},{push:49,view:31},{push:63,view:39},{push:51,view:33},{push:76,view:47},{push:67,view:41}] },
+      'H002': { diseases: ['糖尿病', '高血压', '冠心病', '胃镜', '肠镜'], pushData: [245, 189, 156, 178, 203], viewData: [168, 132, 98, 102, 145], trendData: [{push:38,view:24},{push:45,view:29},{push:42,view:26},{push:51,view:32},{push:48,view:30},{push:58,view:36},{push:55,view:34}] },
+      'H003': { diseases: ['糖尿病', '消化性溃疡', '胃炎', '幽门'], pushData: [198, 167, 145, 234], viewData: [138, 89, 97, 168], trendData: [{push:28,view:18},{push:35,view:22},{push:31,view:19},{push:39,view:24},{push:36,view:22},{push:45,view:28},{push:42,view:26}] }
+    };
+
+    var currentHospital = 'H001';
+
+    function onHospitalChange() {
+      currentHospital = document.getElementById('hospitalSelect').value;
+      var data = hospitalData[currentHospital];
+      diseases = data.diseases;
+      pushData = data.pushData;
+      viewData = data.viewData;
+      trendPushData = data.trendData.map(function(d){return d.push;});
+      trendViewData = data.trendData.map(function(d){return d.view;});
+      totalPush = pushData.reduce(function(a,b){return a+b;});
+      totalView = viewData.reduce(function(a,b){return a+b;});
+      overallRate = ((totalView/totalPush)*100).toFixed(1);
+      document.getElementById('totalPush').textContent = totalPush.toLocaleString();
+      document.getElementById('totalView').textContent = totalView.toLocaleString();
+      document.getElementById('overallRate').textContent = overallRate + '%';
+      document.getElementById('avgRate').textContent = overallRate + '%';
+      viewRates = [];
+      for(var i=0; i<viewData.length; i++) {
+        viewRates.push(((viewData[i]/pushData[i])*100).toFixed(1));
+      }
+      diseaseGrid.innerHTML = '';
+      for(var i=0; i<diseases.length; i++) {
+        diseaseGrid.innerHTML += '<div class="disease-item" onclick="openDiseaseDetail(\'' + diseases[i] + '\', ' + i + ')">';
+        diseaseGrid.innerHTML += '<div class="name">' + diseases[i] + '</div>';
+        diseaseGrid.innerHTML += '<div class="stats"><span style="color:#16a34a">推送:' + pushData[i] + '</span><span style="color:#ca8a04">查看:' + viewData[i] + '</span></div></div>';
+      }
+      chartMain.setOption({ xAxis: { data: diseases }, series: [{ data: pushData }, { data: viewData }] });
+      chartPie.setOption({ series: [{ data: diseases.map(function(n,i){return{value:pushData[i],name:n};})} ] });
+      chartRate.setOption({ yAxis: { data: diseases.slice().reverse() }, series: [{ data: viewRates.slice().reverse() }] });
+      chartTrend.setOption({ xAxis: { data: ['周一','周二','周三','周四','周五','周六','周日'] }, series: [{ data: trendPushData }, { data: trendViewData }] });
+    }
 
     var currentPush = totalPush;
     var currentView = totalView;
