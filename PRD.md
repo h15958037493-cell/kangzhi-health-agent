@@ -196,152 +196,21 @@
 
 ---
 
-## 4. 数据埋点需求
+## 4. 数据需求说明
 
-### 4.1 埋点概述
+### 4.1 数据来源
 
-数据大屏的数据来源于健康宣教系统后端数据库，埋点数据由用户行为触发后端记录，大屏通过 API 拉取并展示。埋点分为两类：**前端事件埋点**（用户行为）和**后端数据埋点**（推送/查看记录）。
+大屏展示所需的数据来源于健康宣教系统后端，具体存储方式和接口设计由后端开发团队负责。
 
----
+### 4.2 数据隔离
 
-### 4.2 后端数据埋点（推送与查看记录）
+- 每个医院的数据相互隔离，只能查看当前选中医院的数据
+- 病种数据与医院绑定，不同医院可配置不同的病种
 
-健康宣教系统后端需记录每次推送和查看行为，作为大屏数据的源头。病种与医院绑定，推送和查看记录均需关联医院 ID。
+### 4.3 数据更新
 
-#### 4.2.1 医院信息表（hospital）
-
-| 字段名 | 数据类型 | 说明 | 示例 |
-|--------|---------|------|------|
-| id | BigInt | 主键 | 1 |
-| hospital_id | String | 医院唯一标识 | H001 |
-| hospital_name | String | 医院名称 | 衢州市人民医院 |
-| hospital_code | String | 医院编码 | QZRMYY |
-| created_at | DateTime | 创建时间 | 2026-01-01 00:00:00 |
-
-#### 4.2.2 病种规则配置表（disease_rule）
-
-每个医院独立配置自己的病种规则，病种与医院绑定：
-
-| 字段名 | 数据类型 | 说明 | 示例 |
-|--------|---------|------|------|
-| id | BigInt | 主键 | 1 |
-| hospital_id | String | 所属医院 ID | H001 |
-| disease_id | String | 病种 ID | diabetes |
-| disease_name | String | 病种名称 | 糖尿病 |
-| description | String | 病种描述 | 糖尿病健康宣教内容 |
-| target_age | String | 目标年龄段 | 35-70岁 |
-| risk_level | String | 风险等级 | 高/中/低 |
-| push_rule_count | Int | 推送规则数量 | 5 |
-| department | String | 所属科室 | 内分泌科 |
-| status | String | 状态 | enabled/disabled |
-| created_at | DateTime | 创建时间 | 2026-01-01 00:00:00 |
-| updated_at | DateTime | 更新时间 | 2026-05-25 10:00:00 |
-
-#### 4.2.3 推送记录表（push_log）
-
-每次向用户推送宣教内容时，记录一条推送日志，按医院隔离：
-
-| 字段名 | 数据类型 | 说明 | 示例 |
-|--------|---------|------|------|
-| id | BigInt | 主键 | 100001 |
-| hospital_id | String | 医院 ID | H001 |
-| disease_id | String | 病种 ID（关联 disease_rule） | diabetes |
-| disease_name | String | 病种名称 | 糖尿病 |
-| user_id | String | 推送目标用户 ID | U123456 |
-| push_time | DateTime | 推送时间 | 2026-05-25 10:30:00 |
-| push_channel | String | 推送渠道 | wechat/短信/APP |
-| push_content_id | String | 推送内容 ID | C001 |
-| push_status | String | 推送状态 | success/failed |
-| created_at | DateTime | 记录创建时间 | 2026-05-25 10:30:01 |
-
-#### 4.2.4 查看记录表（view_log）
-
-每次用户点击查看宣教内容时，记录一条查看日志，按医院隔离：
-
-| 字段名 | 数据类型 | 说明 | 示例 |
-|--------|---------|------|------|
-| id | BigInt | 主键 | 200001 |
-| hospital_id | String | 医院 ID | H001 |
-| disease_id | String | 病种 ID（关联 disease_rule） | diabetes |
-| disease_name | String | 病种名称 | 糖尿病 |
-| user_id | String | 查看用户 ID | U123456 |
-| view_time | DateTime | 查看时间 | 2026-05-25 10:35:22 |
-| view_duration | Int | 查看时长（秒） | 45 |
-| view_source | String | 来源 | push_click/history_browse |
-| push_log_id | BigInt | 关联的推送记录 ID（可空） | 100001 |
-| created_at | DateTime | 记录创建时间 | 2026-05-25 10:35:23 |
-
----
-
-### 4.3 数据交互说明
-
-前端通过调用后端 RESTful API 获取数据，具体接口设计由后端开发团队负责。接口需满足以下要求：
-
-1. **医院列表接口**：返回当前用户有权限访问的医院列表
-2. **汇总数据接口**：返回指定医院的累计推送、今日推送、累计查看、综合查看率
-3. **病种列表接口**：从 disease_rule 表获取指定医院的病种配置列表
-4. **趋势数据接口**：返回指定医院近 N 天的推送和查看趋势
-5. **推送分布接口**：返回指定医院各病种的推送次数和占比
-6. **单病种详情接口**：返回指定医院指定病种的详细信息
-
-所有数据按 hospital_id 隔离，支持按医院筛选和切换。
-
----
-
-### 4.4 前端行为埋点
-
-大屏页面本身需记录用户行为，用于分析使用情况。
-
-#### 4.4.1 埋点事件清单
-
-| 事件名 | 触发时机 | 上报参数 | 目的 |
-|--------|---------|---------|------|
-| page_view | 页面加载完成 | page_name, refer, device, browser | 统计页面访问量 |
-| chart_hover | 鼠标悬停图表 | chart_type, disease_id, hover_duration | 分析用户关注点 |
-| detail_click | 点击"查看详情" | modal_type, click_source | 统计详情查看率 |
-| disease_card_click | 点击病种卡片 | disease_id, disease_name | 分析病种关注度 |
-| refresh_click | 点击手动刷新 | data_type, refresh_time | 统计手动刷新频率 |
-| modal_open | 弹窗打开 | modal_type, open_source | 分析弹窗使用情况 |
-| modal_close | 弹窗关闭 | modal_type, stay_duration | 分析弹窗停留时长 |
-
-#### 4.4.2 埋点数据格式
-
-```json
-{
-  "event": "detail_click",
-  "event_time": "2026-05-25T10:30:00+08:00",
-  "page_name": "健康宣教数据大屏",
-  "user_id": "admin_001",
-  "device": "Windows 10",
-  "browser": "Chrome 120",
-  "params": {
-    "modal_type": "disease_detail",
-    "click_source": "disease_card"
-  }
-}
-```
-
-#### 4.4.3 埋点上报方式
-
-- 使用.gif 1x1 像素埋点（无阻塞，无性能影响）
-- 数据上报至后端 `/api/analytics/event` 接口
-- 离线用户访问时，埋点数据本地缓存，恢复网络后重试上报
-
----
-
-### 4.5 数据更新机制
-
-#### 4.5.1 实时数据刷新
-
-- 大屏页面加载时调用 API 获取最新数据
-- 每 30 秒自动调用 `/api/dashboard/summary` 和 `/api/dashboard/diseases` 刷新数据
-- 用户可手动点击刷新按钮强制刷新
-- 数据更新时图表平滑过渡，不闪烁
-
-#### 4.5.2 数据延迟处理
-
-- 后端每次 API 请求时返回 `update_time` 时间戳
-- 前端比对时间，若超过 5 分钟未更新，显示警告提示"数据更新可能存在延迟"
+- 大屏页面支持数据实时刷新，展示最新统计数据
+- 具体刷新频率和更新机制由前后端协商确定
 
 ---
 
@@ -352,15 +221,11 @@
 | 指标 | 要求 | 场景 |
 |------|------|------|
 | 页面首次加载 | < 3s | 4G 网络，ECharts CDN 加载完成 |
-| API 接口响应 | P99 < 500ms | 正常负载 |
-| 图表数据刷新 | < 1s | 用户无感知 |
-| 前端埋点上报 | 异步，无阻塞 | 不影响页面性能 |
+| 图表数据刷新 | 无卡顿 | 用户无感知 |
 
 ### 5.2 安全要求
 
-- [ ] 所有 API 接口需 Token 鉴权，防止未授权访问
-- [ ] 埋点数据需脱敏处理，不包含用户敏感信息
-- [ ] 后端 API 需防止 SQL 注入 / XSS 攻击
+- [ ] 后端数据存储需保障安全
 - [ ] 大屏页面部署需 HTTPS
 
 ### 5.3 兼容性
@@ -436,9 +301,6 @@
 - [ ] 查看率排行横向条形图（按医院隔离）
 - [ ] 详情弹窗功能
 - [ ] 浅色系 UI 设计
-- [ ] 前端行为埋点
-- [ ] 后端 API 接口开发（按医院隔离）
-- [ ] 数据库表设计（hospital、disease_rule、push_log、view_log）
 
 ### 后续迭代
 
@@ -454,9 +316,7 @@
 
 | 类型 | 描述 | 影响 | 应对方案 |
 |------|------|------|---------|
-| 风险 | 后端 API 性能不足 | 高 | 添加 Redis 缓存，API 结果缓存 30s |
-| 风险 | 埋点数据量大影响数据库 | 中 | 分表分区，定期归档历史数据 |
-| 假设 | 后端已具备 push_log 和 view_log 数据基础 | - | 需后端确认现有表结构 |
+| 风险 | 后端数据结构与预期不符 | 中 | 前后端及时沟通确认 |
 | 假设 | 大屏页面无需登录即可访问 | - | 需安全评估确认 |
 
 ---
@@ -465,16 +325,7 @@
 
 ### 10.1 数据接口说明
 
-前端通过调用后端 RESTful API 获取数据，具体接口设计由后端开发团队负责。
-
-### 10.2 数据库表清单
-
-| 表名 | 说明 |
-|------|------|
-| hospital | 医院信息表 |
-| disease_rule | 病种规则配置表（病种与医院绑定） |
-| push_log | 推送记录表（按医院隔离） |
-| view_log | 查看记录表（按医院隔离） |
+前端通过调用后端 RESTful API 获取数据，具体接口设计和数据结构由后端开发团队负责。
 
 ### 10.3 参考资料
 
