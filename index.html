@@ -160,13 +160,9 @@
       <div class="card-header"><div class="card-title">近7天推送趋势</div><span class="card-action" onclick="openDetail('trend')">查看详情</span></div>
       <div id="trendChart" class="chart-container"></div>
     </article>
-    <article class="card" style="grid-column:7/10;grid-row:5/6">
+    <article class="card" style="grid-column:7/13;grid-row:5/6">
       <div class="card-header"><div class="card-title">推送分布</div><span class="card-action" onclick="openDetail('pie')">查看详情</span></div>
       <div id="pieChart" class="chart-container"></div>
-    </article>
-    <article class="card" style="grid-column:10/13;grid-row:5/6">
-      <div class="card-header"><div class="card-title">查看率排行</div><span class="card-action" onclick="openDetail('ranking')">查看详情</span></div>
-      <div id="rateChart" class="chart-container"></div>
     </article>
   </div>
 
@@ -246,14 +242,6 @@
       ]
     });
 
-    echarts.init(document.getElementById('rateChart')).setOption({
-      tooltip: { trigger: 'axis' },
-      grid: { left: 60, right: 20, top: 10, bottom: 10 },
-      xAxis: { type: 'value', max: 100 },
-      yAxis: { type: 'category', data: diseases.slice().reverse() },
-      series: [{ name: '查看率', type: 'bar', data: viewRates.slice().reverse(), itemStyle: { color: '#f97316' } }]
-    });
-
     var diseaseInfo = {
       '屈光手术': { desc: '激光矫正近视、远视、散光', age: '18-45岁', risk: '中等' },
       '糖尿病': { desc: '慢性代谢性疾病，需长期管理血糖', age: '40岁以上', risk: '高' },
@@ -273,18 +261,29 @@
         title.textContent = '病种推送与查看详情';
         body.innerHTML = '<h3>统计概览</h3><p>总推送: ' + totalPush + ' | 总查看: ' + totalView + ' | 平均查看率: ' + overallRate + '%</p>';
       } else if(type == 'diseases') {
-        title.textContent = '所有病种详情';
-        body.innerHTML = '<h3>病种列表</h3>' + diseaseHTML;
+        title.textContent = '所有医院病种详情';
+        var allData = [];
+        for(var hid in hospitalData) {
+          var hdata = hospitalData[hid];
+          for(var i=0; i<hdata.diseases.length; i++) {
+            var rate = ((hdata.viewData[i]/hdata.pushData[i])*100).toFixed(1);
+            allData.push({hospital: hdata.name, disease: hdata.diseases[i], push: hdata.pushData[i], view: hdata.viewData[i], rate: rate});
+          }
+        }
+        var totalAllPush = 0, totalAllView = 0;
+        allData.forEach(function(d){ totalAllPush += d.push; totalAllView += d.view; });
+        body.innerHTML = '<h3>汇总</h3><p>总医院数: 3 | 总病种数: ' + allData.length + ' | 总推送: ' + totalAllPush + ' | 总查看: ' + totalAllView + '</p>';
+        body.innerHTML += '<h3>病种明细</h3><table style="width:100%;border-collapse:collapse;"><tr style="background:#e2e8f0;"><th style="padding:8px;border:1px solid #ddd;">医院</th><th style="padding:8px;border:1px solid #ddd;">病种</th><th style="padding:8px;border:1px solid #ddd;">推送</th><th style="padding:8px;border:1px solid #ddd;">查看</th><th style="padding:8px;border:1px solid #ddd;">查看率</th></tr>';
+        allData.forEach(function(d){
+          body.innerHTML += '<tr><td style="padding:8px;border:1px solid #ddd;">' + d.hospital + '</td><td style="padding:8px;border:1px solid #ddd;">' + d.disease + '</td><td style="padding:8px;border:1px solid #ddd;">' + d.push + '</td><td style="padding:8px;border:1px solid #ddd;">' + d.view + '</td><td style="padding:8px;border:1px solid #ddd;">' + d.rate + '%</td></tr>';
+        });
+        body.innerHTML += '</table>';
       } else if(type == 'trend') {
         title.textContent = '近7天推送趋势';
         body.innerHTML = '<h3>周数据汇总</h3><p>本周推送: ' + trendPushSum + ' | 本周查看: ' + trendViewSum + '</p>';
       } else if(type == 'pie') {
         title.textContent = '推送分布详情';
         body.innerHTML = '<h3>分布明细</h3>' + diseases.map(function(n,i) { return '<p>' + n + ': ' + pushData[i] + '次</p>'; }).join('');
-      } else if(type == 'ranking') {
-        title.textContent = '查看率排行榜';
-        var sorted = diseases.map(function(n,i) { return {name:n, rate:parseFloat(viewRates[i])}; }).sort(function(a,b) { return b.rate - a.rate; });
-        body.innerHTML = '<h3>排行榜</h3>' + sorted.map(function(item,i) { return '<p>' + (i+1) + '. ' + item.name + ': ' + item.rate + '%</p>'; }).join('');
       }
       document.getElementById('modal').classList.add('active');
     }
@@ -313,12 +312,11 @@
 
     var chartMain = echarts.getInstanceByDom(document.getElementById('mainChart'));
     var chartPie = echarts.getInstanceByDom(document.getElementById('pieChart'));
-    var chartRate = echarts.getInstanceByDom(document.getElementById('rateChart'));
 
     var hospitalData = {
-      'H001': { diseases: ['屈光手术', '糖尿病', '炎症性肠病', '消化性溃疡', '胃镜', '肠镜', '胃炎', '胃肠镜', '幽门'], pushData: [312, 517, 208, 193, 207, 483, 196, 214, 418], viewData: [187, 388, 94, 101, 114, 266, 127, 118, 293], trendData: [{push:43,view:27},{push:57,view:35},{push:49,view:31},{push:63,view:39},{push:51,view:33},{push:76,view:47},{push:67,view:41}] },
-      'H002': { diseases: ['糖尿病', '高血压', '冠心病', '胃镜', '肠镜'], pushData: [245, 189, 156, 178, 203], viewData: [168, 132, 98, 102, 145], trendData: [{push:38,view:24},{push:45,view:29},{push:42,view:26},{push:51,view:32},{push:48,view:30},{push:58,view:36},{push:55,view:34}] },
-      'H003': { diseases: ['糖尿病', '消化性溃疡', '胃炎', '幽门'], pushData: [198, 167, 145, 234], viewData: [138, 89, 97, 168], trendData: [{push:28,view:18},{push:35,view:22},{push:31,view:19},{push:39,view:24},{push:36,view:22},{push:45,view:28},{push:42,view:26}] }
+      'H001': { name: '衢州市人民医院', diseases: ['屈光手术', '糖尿病', '炎症性肠病', '消化性溃疡', '胃镜', '肠镜', '胃炎', '胃肠镜', '幽门'], pushData: [312, 517, 208, 193, 207, 483, 196, 214, 418], viewData: [187, 388, 94, 101, 114, 266, 127, 118, 293], trendData: [{push:43,view:27},{push:57,view:35},{push:49,view:31},{push:63,view:39},{push:51,view:33},{push:76,view:47},{push:67,view:41}] },
+      'H002': { name: '柯城区人民医院', diseases: ['糖尿病', '高血压', '冠心病', '胃镜', '肠镜'], pushData: [245, 189, 156, 178, 203], viewData: [168, 132, 98, 102, 145], trendData: [{push:38,view:24},{push:45,view:29},{push:42,view:26},{push:51,view:32},{push:48,view:30},{push:58,view:36},{push:55,view:34}] },
+      'H003': { name: '衢江区人民医院', diseases: ['糖尿病', '消化性溃疡', '胃炎', '幽门'], pushData: [198, 167, 145, 234], viewData: [138, 89, 97, 168], trendData: [{push:28,view:18},{push:35,view:22},{push:31,view:19},{push:39,view:24},{push:36,view:22},{push:45,view:28},{push:42,view:26}] }
     };
 
     var currentHospital = 'H001';
@@ -350,7 +348,6 @@
       }
       chartMain.setOption({ xAxis: { data: diseases }, series: [{ data: pushData }, { data: viewData }] });
       chartPie.setOption({ series: [{ data: diseases.map(function(n,i){return{value:pushData[i],name:n};})} ] });
-      chartRate.setOption({ yAxis: { data: diseases.slice().reverse() }, series: [{ data: viewRates.slice().reverse() }] });
       chartTrend.setOption({ xAxis: { data: ['周一','周二','周三','周四','周五','周六','周日'] }, series: [{ data: trendPushData }, { data: trendViewData }] });
     }
 
@@ -379,10 +376,6 @@
 
       chartPie.setOption({
         series: [{ type: 'pie', radius: ['45%', '75%'], data: diseases.map(function(n,i) { return { value: pushData[i], name: n }; }) }]
-      });
-
-      chartRate.setOption({
-        series: [{ name: '查看率', data: viewRates.slice().reverse(), itemStyle: { color: '#f97316' } }]
       });
     }, 6000);
   </script>
