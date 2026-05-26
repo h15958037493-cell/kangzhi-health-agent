@@ -16,7 +16,7 @@
       padding: 16px;
       display: grid;
       grid-template-columns: repeat(12, 1fr);
-      grid-template-rows: 70px repeat(4, 1fr);
+      grid-template-rows: 70px 140px 1fr;
       gap: 12px;
     }
     .header {
@@ -105,6 +105,17 @@
     }
     .modal-header { display: flex; justify-content: space-between; margin-bottom: 20px; }
     .modal-close { width: 32px; height: 32px; border: none; background: #f8fafc; border-radius: 50%; cursor: pointer; }
+    .date-picker {
+      padding: 6px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 12px;
+      background: white;
+      cursor: pointer;
+      color: #334155;
+    }
+    .date-picker:focus { outline: none; border-color: #2563eb; }
+    .card-header-right { display: flex; align-items: center; gap: 10px; }
   </style>
 </head>
 <body>
@@ -121,30 +132,36 @@
       <div id="currentTime"></div>
     </header>
 
-    <section class="card stat-card" style="grid-column:1/4">
+    <section class="card stat-card" style="grid-column:1/4;grid-row:2/3">
       <div class="number" id="totalPush"></div>
       <div class="label">累计推送次数</div>
     </section>
-    <section class="card stat-card" style="grid-column:4/7">
+    <section class="card stat-card" style="grid-column:4/7;grid-row:2/3">
       <div class="number" id="todayPush">56</div>
-      <div class="label">今日推送次数</div>
+      <div class="label" id="todayPushLabel">今日推送次数</div>
     </section>
-    <section class="card stat-card" style="grid-column:7/10">
+    <section class="card stat-card" style="grid-column:7/10;grid-row:2/3">
       <div class="number" id="totalView"></div>
       <div class="label">累计查看次数</div>
     </section>
-    <section class="card stat-card" style="grid-column:10/13">
+    <section class="card stat-card" style="grid-column:10/13;grid-row:2/3">
       <div class="number" id="overallRate"></div>
       <div class="label">综合查看率</div>
     </section>
 
-    <article class="card" style="grid-column:1/13;grid-row:3/4">
-      <div class="card-header"><div class="card-title">近7天推送趋势</div><span class="card-action" onclick="openDetail('trend')">查看详情</span></div>
-      <div id="trendChart" class="chart-container"></div>
+    <article class="card" style="grid-column:1/8;grid-row:3/4">
+      <div class="card-header"><div class="card-title">病种推送与查看（历史总量）</div><span class="card-action" onclick="openDetail('chart')">查看详情</span></div>
+      <div id="mainChart" class="chart-container"></div>
     </article>
-    <article class="card" style="grid-column:1/13;grid-row:4/5">
-      <div class="card-header"><div class="card-title">推送分布</div><span class="card-action" onclick="openDetail('pie')">查看详情</span></div>
-      <div id="pieChart" class="chart-container"></div>
+    <article class="card" style="grid-column:8/13;grid-row:3/4">
+      <div class="card-header">
+        <div class="card-title">病种详情（当天数据）</div>
+        <div class="card-header-right">
+          <input type="date" class="date-picker" id="datePicker" onchange="onDateChange()" />
+          <span class="card-action" onclick="openDetail('diseases')">查看全部</span>
+        </div>
+      </div>
+      <div class="disease-grid" id="diseaseGrid"></div>
     </article>
   </div>
 
@@ -162,18 +179,60 @@
     setInterval(updateTime, 1000);
     updateTime();
 
-    var diseases = ['屈光手术', '糖尿病', '炎症性肠病', '消化性溃疡', '胃镜', '肠镜', '胃炎', '胃肠镜', '幽门'];
-    var pushData = [312, 517, 208, 193, 207, 483, 196, 214, 418];
-    var viewData = [187, 388, 94, 101, 114, 266, 127, 118, 293];
+    function fmtDate(d) {
+      var y = d.getFullYear();
+      var m = (d.getMonth()+1).toString().padStart(2,'0');
+      var day = d.getDate().toString().padStart(2,'0');
+      return y + '-' + m + '-' + day;
+    }
+    function dateHash(str) {
+      var h = 0;
+      for(var i=0;i<str.length;i++){ h = ((h<<5)-h)+str.charCodeAt(i); h|=0; }
+      return Math.abs(h);
+    }
+    function genDailyData(hospitalId, dateStr, baseArr) {
+      var seed = dateHash(hospitalId + dateStr);
+      var push = [], view = [];
+      for(var i=0;i<baseArr.length;i++) {
+        var ratio = baseArr[i] / 365;
+        var rnd1 = ((seed * (i+1) * 9301 + 49297) % 233280) / 233280;
+        var rnd2 = ((seed * (i+3) * 9301 + 49297) % 233280) / 233280;
+        var p = Math.max(1, Math.round(ratio * (0.6 + rnd1 * 0.9)));
+        var rate = 0.4 + rnd2 * 0.4;
+        var v = Math.max(0, Math.round(p * rate));
+        push.push(p); view.push(v);
+      }
+      return { push: push, view: view };
+    }
+
+    var hospitalData = {
+      'H001': { name: '衢州市人民医院', diseases: ['屈光手术', '糖尿病', '炎症性肠病', '消化性溃疡', '胃镜', '肠镜', '胃炎', '胃肠镜', '幽门'], pushData: [312, 517, 208, 193, 207, 483, 196, 214, 418], viewData: [187, 388, 94, 101, 114, 266, 127, 118, 293] },
+      'H002': { name: '柯城区人民医院', diseases: ['糖尿病', '高血压', '冠心病', '胃镜', '肠镜'], pushData: [245, 189, 156, 178, 203], viewData: [168, 132, 98, 102, 145] },
+      'H003': { name: '衢江区人民医院', diseases: ['糖尿病', '消化性溃疡', '胃炎', '幽门'], pushData: [198, 167, 145, 234], viewData: [138, 89, 97, 168] }
+    };
+
+    var currentHospital = 'H001';
+    var currentDate = fmtDate(new Date());
+    document.getElementById('datePicker').value = currentDate;
+    document.getElementById('datePicker').max = currentDate;
+
+    var diseases = hospitalData[currentHospital].diseases;
+    var pushData = hospitalData[currentHospital].pushData;
+    var viewData = hospitalData[currentHospital].viewData;
 
     var totalPush = pushData.reduce(function(a,b){return a+b;});
     var totalView = viewData.reduce(function(a,b){return a+b;});
     var overallRate = ((totalView/totalPush)*100).toFixed(1);
 
+    var daily = genDailyData(currentHospital, currentDate, pushData);
+    var dailyPushData = daily.push;
+    var dailyViewData = daily.view;
+    var todayPush = dailyPushData.reduce(function(a,b){return a+b;});
+
     document.getElementById('totalPush').textContent = totalPush.toLocaleString();
     document.getElementById('totalView').textContent = totalView.toLocaleString();
     document.getElementById('overallRate').textContent = overallRate + '%';
-    document.getElementById('avgRate').textContent = overallRate + '%';
+    document.getElementById('todayPush').textContent = todayPush.toLocaleString();
 
     var viewRates = [];
     for(var i=0; i<viewData.length; i++) {
@@ -181,14 +240,32 @@
     }
 
     var diseaseGrid = document.getElementById('diseaseGrid');
-    var diseaseHTML = '';
-    for(var i=0; i<diseases.length; i++) {
-      diseaseHTML += '<div class="disease-item" onclick="openDiseaseDetail(\'' + diseases[i] + '\', ' + i + ')">';
-      diseaseHTML += '<div class="name">' + diseases[i] + '</div>';
-      diseaseHTML += '<div class="stats"><span style="color:#16a34a">推送:' + pushData[i] + '</span><span style="color:#ca8a04">查看:' + viewData[i] + '</span></div>';
-      diseaseHTML += '</div>';
+    function calcDiseaseAvgDuration(baseView, diseaseName) {
+      if(baseView <= 0) return 0;
+      var nodes = diseaseRules[diseaseName] || ['默认规则'];
+      var seed = dateHash(diseaseName);
+      var totalSec = 0;
+      for(var i=0;i<nodes.length;i++) {
+        var nodeSec = calcAvgDurationSec(baseView + nodes[i].length * (i + 2));
+        var nodeView = Math.max(1, Math.round(baseView * (0.5 + ((seed*(i+1)*9301+49297)%233280)/233280)));
+        totalSec += nodeSec * nodeView;
+      }
+      return Math.round(totalSec / baseView);
     }
-    diseaseGrid.innerHTML = diseaseHTML;
+
+    function renderDiseaseGrid() {
+      var html = '';
+      for(var i=0; i<diseases.length; i++) {
+        var dRate = dailyPushData[i] > 0 ? ((dailyViewData[i]/dailyPushData[i])*100).toFixed(1) : '0.0';
+        var avgDur = dailyViewData[i] > 0 ? formatDuration(calcDiseaseAvgDuration(dailyViewData[i], diseases[i])) : '-';
+        html += '<div class="disease-item" onclick="openDiseaseDetail(\'' + diseases[i] + '\', ' + i + ')">';
+        html += '<div class="name">' + diseases[i] + '</div>';
+        html += '<div class="stats"><span style="color:#16a34a">推送:' + dailyPushData[i] + '</span><span style="color:#ca8a04">查看:' + dailyViewData[i] + '</span><span style="color:#9333ea">均:' + avgDur + '</span></div>';
+        html += '</div>';
+      }
+      diseaseGrid.innerHTML = html;
+    }
+    renderDiseaseGrid();
 
     echarts.init(document.getElementById('mainChart')).setOption({
       tooltip: { trigger: 'axis' },
@@ -202,28 +279,6 @@
       ]
     });
 
-    echarts.init(document.getElementById('pieChart')).setOption({
-      tooltip: { trigger: 'item' },
-      series: [{ type: 'pie', radius: ['45%', '75%'], data: diseases.map(function(n,i) { return { value: pushData[i], name: n }; }) }]
-    });
-
-    var trendPushData = [43,57,49,63,51,76,67];
-    var trendViewData = [27,35,31,39,33,47,41];
-    var trendPushSum = trendPushData.reduce(function(a,b){return a+b;});
-    var trendViewSum = trendViewData.reduce(function(a,b){return a+b;});
-
-    echarts.init(document.getElementById('trendChart')).setOption({
-      tooltip: { trigger: 'axis' },
-      legend: { data: ['推送次数', '查看次数'], top: 0, right: 0 },
-      grid: { left: 40, right: 20, top: 30, bottom: 10 },
-      xAxis: { type: 'category', data: ['周一','周二','周三','周四','周五','周六','周日'] },
-      yAxis: { type: 'value' },
-      series: [
-        { name: '推送次数', type: 'line', smooth: true, data: trendPushData, lineStyle: { color: '#2563eb' } },
-        { name: '查看次数', type: 'line', smooth: true, data: trendViewData, lineStyle: { color: '#16a34a' } }
-      ]
-    });
-
     var diseaseInfo = {
       '屈光手术': { desc: '激光矫正近视、远视、散光', age: '18-45岁', risk: '中等' },
       '糖尿病': { desc: '慢性代谢性疾病，需长期管理血糖', age: '40岁以上', risk: '高' },
@@ -233,54 +288,214 @@
       '肠镜': { desc: '结肠内镜检查', age: '45岁以上', risk: '低' },
       '胃炎': { desc: '胃黏膜炎症，分为急性和慢性', age: '30-60岁', risk: '低' },
       '胃肠镜': { desc: '胃镜和肠镜联合检查', age: '40岁以上', risk: '低' },
-      '幽门': { desc: '幽门螺杆菌感染，可引起胃炎胃溃疡', age: '全年龄段', risk: '中等' }
+      '幽门': { desc: '幽门螺杆菌感染，可引起胃炎胃溃疡', age: '全年龄段', risk: '中等' },
+      '高血压': { desc: '动脉血压持续升高的慢性疾病', age: '40岁以上', risk: '高' },
+      '冠心病': { desc: '冠状动脉粥样硬化性心脏病', age: '50岁以上', risk: '高' }
     };
+
+    var diseaseRules = {
+      '屈光手术': ['术前评估提醒', '术前检查通知', '术前用药指导', '手术当日须知', '术后第1日复查', '术后第7日复查', '术后用药提醒'],
+      '糖尿病': ['空腹血糖监测提醒', '餐后血糖监测提醒', '用药提醒', '饮食指导', '运动建议', '糖化血红蛋白复查', '并发症筛查提醒'],
+      '炎症性肠病': ['用药依从性提醒', '复诊提醒', '饮食调整指导', '症状日记记录', '肠镜复查通知'],
+      '消化性溃疡': ['用药提醒', '饮食禁忌', '复查提醒', '症状自查'],
+      '胃镜': ['检查前禁食提醒', '检查前准备', '检查当日须知', '检查后注意事项', '报告解读'],
+      '肠镜': ['检查前3日饮食', '检查前清肠提醒', '检查当日须知', '检查后饮食恢复', '报告解读'],
+      '胃炎': ['用药提醒', '饮食指导', '复查提醒'],
+      '胃肠镜': ['检查前准备', '检查前清肠', '检查当日须知', '检查后注意事项', '报告解读'],
+      '幽门': ['用药提醒', '四联疗法指导', '复查呼气试验', '家庭防交叉感染', '饮食指导'],
+      '高血压': ['血压监测提醒', '用药提醒', '低盐饮食指导', '复诊提醒'],
+      '冠心病': ['用药提醒', '症状自查', '复诊提醒', '运动指导', '急救知识']
+    };
+
+    function genRuleNodeData(hospitalId, dateStr, diseaseName, basePush, baseView) {
+      var nodes = diseaseRules[diseaseName] || ['默认规则'];
+      var seed = dateHash(hospitalId + dateStr + diseaseName);
+      var pushArr = [], viewArr = [];
+      var weights = [];
+      var sumW = 0;
+      for(var i=0;i<nodes.length;i++) {
+        var rnd = ((seed * (i+1) * 9301 + 49297) % 233280) / 233280;
+        var w = 0.5 + rnd * 1.5;
+        weights.push(w);
+        sumW += w;
+      }
+      var allocatedPush = 0, allocatedView = 0;
+      for(var i=0;i<nodes.length;i++) {
+        var p, v;
+        if(i === nodes.length - 1) {
+          p = Math.max(0, basePush - allocatedPush);
+          v = Math.max(0, baseView - allocatedView);
+        } else {
+          p = Math.round(basePush * weights[i] / sumW);
+          var rateRnd = ((seed * (i+5) * 9301 + 49297) % 233280) / 233280;
+          var rate = baseView > 0 && basePush > 0 ? (baseView/basePush) * (0.7 + rateRnd * 0.6) : 0;
+          v = Math.min(p, Math.round(p * rate));
+          allocatedPush += p;
+          allocatedView += v;
+        }
+        pushArr.push(p);
+        viewArr.push(v);
+      }
+      return { nodes: nodes, push: pushArr, view: viewArr };
+    }
+
+    function buildAllDiseasesTable(mode) {
+      var pArr = mode === 'daily' ? dailyPushData : pushData;
+      var vArr = mode === 'daily' ? dailyViewData : viewData;
+      var rows = '<table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:13px">';
+      rows += '<thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">';
+      rows += '<th style="padding:10px;text-align:left;width:30px"></th>';
+      rows += '<th style="padding:10px;text-align:left">病种</th>';
+      rows += '<th style="padding:10px;text-align:right">推送次数</th>';
+      rows += '<th style="padding:10px;text-align:right">查看次数</th>';
+      rows += '<th style="padding:10px;text-align:right">查看率</th>';
+      rows += '<th style="padding:10px;text-align:right">平均观看时长</th>';
+      rows += '</tr></thead><tbody>';
+      var totalP = 0, totalV = 0, totalSec = 0;
+      for(var i=0; i<diseases.length; i++) {
+        totalP += pArr[i];
+        totalV += vArr[i];
+        var rate = pArr[i] > 0 ? ((vArr[i]/pArr[i])*100).toFixed(1) : '0.0';
+        var avgDurSec = vArr[i] > 0 ? calcDiseaseAvgDuration(vArr[i], diseases[i]) : 0;
+        totalSec += avgDurSec * vArr[i];
+        var rowKey = mode + '-' + i;
+        rows += '<tr style="border-bottom:1px solid #f1f5f9;cursor:pointer" onclick="toggleNodeRow(\'' + rowKey + '\',\'' + diseases[i].replace(/'/g,"\\'") + '\',' + i + ',\'' + mode + '\')">';
+        rows += '<td style="padding:10px;text-align:center;color:#64748b" id="arrow-' + rowKey + '">▶</td>';
+        rows += '<td style="padding:10px">' + diseases[i] + '</td>';
+        rows += '<td style="padding:10px;text-align:right;color:#2563eb;font-weight:600">' + pArr[i] + '</td>';
+        rows += '<td style="padding:10px;text-align:right;color:#16a34a;font-weight:600">' + vArr[i] + '</td>';
+        rows += '<td style="padding:10px;text-align:right;color:#f97316;font-weight:600">' + rate + '%</td>';
+        rows += '<td style="padding:10px;text-align:right;color:#9333ea;font-weight:600">' + (vArr[i] > 0 ? formatDuration(avgDurSec) : '-') + '</td>';
+        rows += '</tr>';
+        rows += '<tr id="nodes-' + rowKey + '" style="display:none;background:#fafbfc"><td colspan="6" style="padding:0 16px 12px 40px" id="nodes-body-' + rowKey + '"></td></tr>';
+      }
+      var totalRate = totalP > 0 ? ((totalV/totalP)*100).toFixed(1) : '0.0';
+      var totalAvgDur = totalV > 0 ? Math.round(totalSec / totalV) : 0;
+      rows += '<tr style="background:#f8fafc;font-weight:700;border-top:2px solid #e2e8f0">';
+      rows += '<td style="padding:10px"></td>';
+      rows += '<td style="padding:10px">合计</td>';
+      rows += '<td style="padding:10px;text-align:right;color:#2563eb">' + totalP + '</td>';
+      rows += '<td style="padding:10px;text-align:right;color:#16a34a">' + totalV + '</td>';
+      rows += '<td style="padding:10px;text-align:right;color:#f97316">' + totalRate + '%</td>';
+      rows += '<td style="padding:10px;text-align:right;color:#9333ea">' + formatDuration(totalAvgDur) + '</td>';
+      rows += '</tr>';
+      rows += '</tbody></table>';
+      return rows;
+    }
+
+    function toggleNodeRow(rowKey, diseaseName, index, mode) {
+      var tr = document.getElementById('nodes-' + rowKey);
+      var arrow = document.getElementById('arrow-' + rowKey);
+      if(!tr) return;
+      if(tr.style.display === 'none') {
+        var basePush = mode === 'daily' ? dailyPushData[index] : pushData[index];
+        var baseView = mode === 'daily' ? dailyViewData[index] : viewData[index];
+        var dateKey = mode === 'daily' ? currentDate : 'history';
+        var nodes = genRuleNodeData(currentHospital, dateKey, diseaseName, basePush, baseView);
+        var label = mode === 'daily' ? '当日（' + currentDate + '）' : '历史总量';
+        var body = document.getElementById('nodes-body-' + rowKey);
+        body.innerHTML = '<div style="padding:8px 0 4px;font-size:12px;color:#64748b">规则节点明细 - ' + label + ' | 共 ' + nodes.nodes.length + ' 条规则</div>' + buildRuleNodesTable(nodes);
+        tr.style.display = '';
+        arrow.textContent = '▼';
+      } else {
+        tr.style.display = 'none';
+        arrow.textContent = '▶';
+      }
+    }
+
+    function calcAvgDurationSec(seed) {
+      var s = Math.abs(seed) || 1;
+      return 45 + (s % 120);
+    }
+
+    function formatDuration(sec) {
+      var m = Math.floor(sec / 60);
+      var rs = sec % 60;
+      return m > 0 ? (m + '分' + rs + '秒') : (rs + '秒');
+    }
 
     function openDetail(type) {
       var title = document.getElementById('modalTitle');
       var body = document.getElementById('modalBody');
-      if(type == 'chart') {
-        title.textContent = '病种推送与查看详情';
-        body.innerHTML = '<h3>统计概览</h3><p>总推送: ' + totalPush + ' | 总查看: ' + totalView + ' | 平均查看率: ' + overallRate + '%</p>';
-      } else if(type == 'diseases') {
-        title.textContent = '所有医院病种详情';
-        var allData = [];
-        for(var hid in hospitalData) {
-          var hdata = hospitalData[hid];
-          for(var i=0; i<hdata.diseases.length; i++) {
-            var rate = ((hdata.viewData[i]/hdata.pushData[i])*100).toFixed(1);
-            allData.push({hospital: hdata.name, disease: hdata.diseases[i], push: hdata.pushData[i], view: hdata.viewData[i], rate: rate});
-          }
-        }
-        var totalAllPush = 0, totalAllView = 0;
-        allData.forEach(function(d){ totalAllPush += d.push; totalAllView += d.view; });
-        body.innerHTML = '<h3>汇总</h3><p>总医院数: 3 | 总病种数: ' + allData.length + ' | 总推送: ' + totalAllPush + ' | 总查看: ' + totalAllView + '</p>';
-        body.innerHTML += '<h3>病种明细</h3><table style="width:100%;border-collapse:collapse;"><tr style="background:#e2e8f0;"><th style="padding:8px;border:1px solid #ddd;">医院</th><th style="padding:8px;border:1px solid #ddd;">病种</th><th style="padding:8px;border:1px solid #ddd;">推送</th><th style="padding:8px;border:1px solid #ddd;">查看</th><th style="padding:8px;border:1px solid #ddd;">查看率</th></tr>';
-        allData.forEach(function(d){
-          body.innerHTML += '<tr><td style="padding:8px;border:1px solid #ddd;">' + d.hospital + '</td><td style="padding:8px;border:1px solid #ddd;">' + d.disease + '</td><td style="padding:8px;border:1px solid #ddd;">' + d.push + '</td><td style="padding:8px;border:1px solid #ddd;">' + d.view + '</td><td style="padding:8px;border:1px solid #ddd;">' + d.rate + '%</td></tr>';
-        });
-        body.innerHTML += '</table>';
-      } else if(type == 'trend') {
-        title.textContent = '近7天推送趋势';
-        body.innerHTML = '<h3>周数据汇总</h3><p>本周推送: ' + trendPushSum + ' | 本周查看: ' + trendViewSum + '</p>';
-      } else if(type == 'pie') {
-        title.textContent = '推送分布详情';
-        body.innerHTML = '<h3>分布明细</h3>' + diseases.map(function(n,i) { return '<p>' + n + ': ' + pushData[i] + '次</p>'; }).join('');
+      var mode = (type === 'diseases') ? 'daily' : 'history';
+      var pSum, vSum, rate, tagText;
+      if(mode === 'daily') {
+        pSum = dailyPushData.reduce(function(a,b){return a+b;});
+        vSum = dailyViewData.reduce(function(a,b){return a+b;});
+        rate = pSum > 0 ? ((vSum/pSum)*100).toFixed(1) : '0.0';
+        title.textContent = '病种详情 - ' + currentDate + ' 当日明细';
+        tagText = '当日（' + currentDate + '）';
+      } else {
+        pSum = totalPush;
+        vSum = totalView;
+        rate = overallRate;
+        title.textContent = '病种推送与查看 - 历史总量明细';
+        tagText = '历史总量';
       }
+      var summary = '<div style="margin-bottom:10px;font-size:12px;color:#64748b">数据范围：' + tagText + '</div>';
+      summary += '<div style="display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap">';
+      summary += '<div style="flex:1;min-width:140px;padding:14px;background:#eff6ff;border-radius:8px"><div style="font-size:12px;color:#64748b">推送次数</div><div style="font-size:22px;font-weight:700;color:#2563eb;margin-top:4px">' + pSum.toLocaleString() + '</div></div>';
+      summary += '<div style="flex:1;min-width:140px;padding:14px;background:#f0fdf4;border-radius:8px"><div style="font-size:12px;color:#64748b">查看次数</div><div style="font-size:22px;font-weight:700;color:#16a34a;margin-top:4px">' + vSum.toLocaleString() + '</div></div>';
+      summary += '<div style="flex:1;min-width:140px;padding:14px;background:#fff7ed;border-radius:8px"><div style="font-size:12px;color:#64748b">查看率</div><div style="font-size:22px;font-weight:700;color:#f97316;margin-top:4px">' + rate + '%</div></div>';
+      summary += '</div>';
+      body.innerHTML = summary + buildAllDiseasesTable(mode);
       document.getElementById('modal').classList.add('active');
     }
 
+    function buildRuleNodesTable(nodesData) {
+      var rows = '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px">';
+      rows += '<thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">';
+      rows += '<th style="padding:10px;text-align:left">规则名称</th>';
+      rows += '<th style="padding:10px;text-align:right">推送次数</th>';
+      rows += '<th style="padding:10px;text-align:right">查看次数</th>';
+      rows += '<th style="padding:10px;text-align:right">查看率</th>';
+      rows += '<th style="padding:10px;text-align:right">平均观看时长</th>';
+      rows += '</tr></thead><tbody>';
+      var totalP = 0, totalV = 0, totalSec = 0;
+      for(var i=0;i<nodesData.nodes.length;i++) {
+        totalP += nodesData.push[i];
+        totalV += nodesData.view[i];
+        var rate = nodesData.push[i] > 0 ? ((nodesData.view[i]/nodesData.push[i])*100).toFixed(1) : '0.0';
+        var nodeSec = calcAvgDurationSec(nodesData.view[i] + nodesData.nodes[i].length * (i + 2));
+        totalSec += nodeSec * nodesData.view[i];
+        rows += '<tr style="border-bottom:1px solid #f1f5f9">';
+        rows += '<td style="padding:10px">' + nodesData.nodes[i] + '</td>';
+        rows += '<td style="padding:10px;text-align:right;color:#2563eb;font-weight:600">' + nodesData.push[i] + '</td>';
+        rows += '<td style="padding:10px;text-align:right;color:#16a34a;font-weight:600">' + nodesData.view[i] + '</td>';
+        rows += '<td style="padding:10px;text-align:right;color:#f97316;font-weight:600">' + rate + '%</td>';
+        rows += '<td style="padding:10px;text-align:right;color:#9333ea;font-weight:600">' + formatDuration(nodeSec) + '</td>';
+        rows += '</tr>';
+      }
+      var tRate = totalP > 0 ? ((totalV/totalP)*100).toFixed(1) : '0.0';
+      var avgSec = totalV > 0 ? Math.round(totalSec / totalV) : 0;
+      rows += '<tr style="background:#f8fafc;font-weight:700;border-top:2px solid #e2e8f0">';
+      rows += '<td style="padding:10px">合计</td>';
+      rows += '<td style="padding:10px;text-align:right;color:#2563eb">' + totalP + '</td>';
+      rows += '<td style="padding:10px;text-align:right;color:#16a34a">' + totalV + '</td>';
+      rows += '<td style="padding:10px;text-align:right;color:#f97316">' + tRate + '%</td>';
+      rows += '<td style="padding:10px;text-align:right;color:#9333ea">' + formatDuration(avgSec) + '</td>';
+      rows += '</tr>';
+      rows += '</tbody></table>';
+      return rows;
+    }
+
     function openDiseaseDetail(name, index) {
-      var info = diseaseInfo[name];
+      var info = diseaseInfo[name] || { desc: '-', age: '-', risk: '低' };
+      var dRate = dailyPushData[index] > 0 ? ((dailyViewData[index]/dailyPushData[index])*100).toFixed(1) : '0.0';
+      var dailyNodes = genRuleNodeData(currentHospital, currentDate, name, dailyPushData[index], dailyViewData[index]);
+      var historyNodes = genRuleNodeData(currentHospital, 'history', name, pushData[index], viewData[index]);
       document.getElementById('modalTitle').textContent = name + ' - 详情';
-      document.getElementById('modalBody').innerHTML = '<h3>基本信息</h3>' +
+      document.getElementById('modalBody').innerHTML =
+        '<h3 style="margin-bottom:8px">基本信息</h3>' +
         '<p>描述: ' + info.desc + '</p>' +
         '<p>目标年龄段: ' + info.age + '</p>' +
         '<p>风险等级: <span style="color:' + (info.risk=='高'?'#dc2626':info.risk=='中等'?'#f97316':'#16a34a') + '">' + info.risk + '</span></p>' +
-        '<h3>宣教数据</h3>' +
-        '<p>推送次数: ' + pushData[index] + '</p>' +
-        '<p>查看次数: ' + viewData[index] + '</p>' +
-        '<p>查看率: ' + viewRates[index] + '%</p>';
+        '<h3 style="margin-top:18px;margin-bottom:6px">规则节点明细 - 当日（' + currentDate + '）</h3>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:4px">共 ' + dailyNodes.nodes.length + ' 条规则 | 推送 ' + dailyPushData[index] + ' | 查看 ' + dailyViewData[index] + ' | 查看率 ' + dRate + '%</div>' +
+        buildRuleNodesTable(dailyNodes) +
+        '<h3 style="margin-top:18px;margin-bottom:6px">规则节点明细 - 历史总量</h3>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:4px">共 ' + historyNodes.nodes.length + ' 条规则 | 推送 ' + pushData[index] + ' | 查看 ' + viewData[index] + ' | 查看率 ' + viewRates[index] + '%</div>' +
+        buildRuleNodesTable(historyNodes);
       document.getElementById('modal').classList.add('active');
     }
 
@@ -293,44 +508,50 @@
     });
 
     var chartMain = echarts.getInstanceByDom(document.getElementById('mainChart'));
-    var chartPie = echarts.getInstanceByDom(document.getElementById('pieChart'));
 
-    var hospitalData = {
-      'H001': { name: '衢州市人民医院', diseases: ['屈光手术', '糖尿病', '炎症性肠病', '消化性溃疡', '胃镜', '肠镜', '胃炎', '胃肠镜', '幽门'], pushData: [312, 517, 208, 193, 207, 483, 196, 214, 418], viewData: [187, 388, 94, 101, 114, 266, 127, 118, 293], trendData: [{push:43,view:27},{push:57,view:35},{push:49,view:31},{push:63,view:39},{push:51,view:33},{push:76,view:47},{push:67,view:41}] },
-      'H002': { name: '柯城区人民医院', diseases: ['糖尿病', '高血压', '冠心病', '胃镜', '肠镜'], pushData: [245, 189, 156, 178, 203], viewData: [168, 132, 98, 102, 145], trendData: [{push:38,view:24},{push:45,view:29},{push:42,view:26},{push:51,view:32},{push:48,view:30},{push:58,view:36},{push:55,view:34}] },
-      'H003': { name: '衢江区人民医院', diseases: ['糖尿病', '消化性溃疡', '胃炎', '幽门'], pushData: [198, 167, 145, 234], viewData: [138, 89, 97, 168], trendData: [{push:28,view:18},{push:35,view:22},{push:31,view:19},{push:39,view:24},{push:36,view:22},{push:45,view:28},{push:42,view:26}] }
-    };
-
-    var currentHospital = 'H001';
-
-    function onHospitalChange() {
-      currentHospital = document.getElementById('hospitalSelect').value;
+    function refreshAll() {
       var data = hospitalData[currentHospital];
       diseases = data.diseases;
       pushData = data.pushData;
       viewData = data.viewData;
-      trendPushData = data.trendData.map(function(d){return d.push;});
-      trendViewData = data.trendData.map(function(d){return d.view;});
       totalPush = pushData.reduce(function(a,b){return a+b;});
       totalView = viewData.reduce(function(a,b){return a+b;});
       overallRate = ((totalView/totalPush)*100).toFixed(1);
-      document.getElementById('totalPush').textContent = totalPush.toLocaleString();
-      document.getElementById('totalView').textContent = totalView.toLocaleString();
-      document.getElementById('overallRate').textContent = overallRate + '%';
-      document.getElementById('avgRate').textContent = overallRate + '%';
       viewRates = [];
       for(var i=0; i<viewData.length; i++) {
         viewRates.push(((viewData[i]/pushData[i])*100).toFixed(1));
       }
-      diseaseGrid.innerHTML = '';
-      for(var i=0; i<diseases.length; i++) {
-        diseaseGrid.innerHTML += '<div class="disease-item" onclick="openDiseaseDetail(\'' + diseases[i] + '\', ' + i + ')">';
-        diseaseGrid.innerHTML += '<div class="name">' + diseases[i] + '</div>';
-        diseaseGrid.innerHTML += '<div class="stats"><span style="color:#16a34a">推送:' + pushData[i] + '</span><span style="color:#ca8a04">查看:' + viewData[i] + '</span></div></div>';
-      }
+      var d = genDailyData(currentHospital, currentDate, pushData);
+      dailyPushData = d.push;
+      dailyViewData = d.view;
+      todayPush = dailyPushData.reduce(function(a,b){return a+b;});
+
+      document.getElementById('totalPush').textContent = totalPush.toLocaleString();
+      document.getElementById('totalView').textContent = totalView.toLocaleString();
+      document.getElementById('overallRate').textContent = overallRate + '%';
+      document.getElementById('todayPush').textContent = todayPush.toLocaleString();
+
+      renderDiseaseGrid();
       chartMain.setOption({ xAxis: { data: diseases }, series: [{ data: pushData }, { data: viewData }] });
-      chartPie.setOption({ series: [{ data: diseases.map(function(n,i){return{value:pushData[i],name:n};})} ] });
-      chartTrend.setOption({ xAxis: { data: ['周一','周二','周三','周四','周五','周六','周日'] }, series: [{ data: trendPushData }, { data: trendViewData }] });
+      currentPush = totalPush;
+      currentView = totalView;
+    }
+
+    function onHospitalChange() {
+      currentHospital = document.getElementById('hospitalSelect').value;
+      refreshAll();
+    }
+
+    function onDateChange() {
+      currentDate = document.getElementById('datePicker').value || fmtDate(new Date());
+      var d = genDailyData(currentHospital, currentDate, pushData);
+      dailyPushData = d.push;
+      dailyViewData = d.view;
+      todayPush = dailyPushData.reduce(function(a,b){return a+b;});
+      document.getElementById('todayPush').textContent = todayPush.toLocaleString();
+      var todayLabel = currentDate === fmtDate(new Date()) ? '今日推送次数' : currentDate + ' 推送次数';
+      document.getElementById('todayPushLabel').textContent = todayLabel;
+      renderDiseaseGrid();
     }
 
     var currentPush = totalPush;
@@ -347,18 +568,6 @@
       document.getElementById('totalPush').textContent = currentPush.toLocaleString();
       document.getElementById('totalView').textContent = currentView.toLocaleString();
       document.getElementById('overallRate').textContent = currentRate + '%';
-      document.getElementById('avgRate').textContent = currentRate + '%';
-
-      chartMain.setOption({
-        series: [
-          { name: '推送次数', data: pushData },
-          { name: '查看次数', data: viewData }
-        ]
-      });
-
-      chartPie.setOption({
-        series: [{ type: 'pie', radius: ['45%', '75%'], data: diseases.map(function(n,i) { return { value: pushData[i], name: n }; }) }]
-      });
     }, 6000);
   </script>
 </body>
