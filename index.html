@@ -102,6 +102,7 @@
       max-height: 80vh;
       overflow-y: auto;
       padding: 20px;
+      position: relative; /* 新增：防止点击穿透 */
     }
     .modal-header { display: flex; justify-content: space-between; margin-bottom: 20px; }
     .modal-close { width: 32px; height: 32px; border: none; background: #f8fafc; border-radius: 50%; cursor: pointer; }
@@ -211,6 +212,36 @@
       'H003': { name: '衢江区人民医院', diseases: ['糖尿病', '消化性溃疡', '胃炎', '幽门'], pushData: [198, 167, 145, 234], viewData: [138, 89, 97, 168] }
     };
 
+    // 病种规则定义（提前声明，解决函数调用时未定义问题）
+    var diseaseRules = {
+      '屈光手术': ['术前评估提醒', '术前检查通知', '术前用药指导', '手术当日须知', '术后第1日复查', '术后第7日复查', '术后用药提醒'],
+      '糖尿病': ['空腹血糖监测提醒', '餐后血糖监测提醒', '用药提醒', '饮食指导', '运动建议', '糖化血红蛋白复查', '并发症筛查提醒'],
+      '炎症性肠病': ['用药依从性提醒', '复诊提醒', '饮食调整指导', '症状日记记录', '肠镜复查通知'],
+      '消化性溃疡': ['用药提醒', '饮食禁忌', '复查提醒', '症状自查'],
+      '胃镜': ['检查前禁食提醒', '检查前准备', '检查当日须知', '检查后注意事项', '报告解读'],
+      '肠镜': ['检查前3日饮食', '检查前清肠提醒', '检查当日须知', '检查后饮食恢复', '报告解读'],
+      '胃炎': ['用药提醒', '饮食指导', '复查提醒'],
+      '胃肠镜': ['检查前准备', '检查前清肠', '检查当日须知', '检查后注意事项', '报告解读'],
+      '幽门': ['用药提醒', '四联疗法指导', '复查呼气试验', '家庭防交叉感染', '饮食指导'],
+      '高血压': ['血压监测提醒', '用药提醒', '低盐饮食指导', '复诊提醒'],
+      '冠心病': ['用药提醒', '症状自查', '复诊提醒', '运动指导', '急救知识']
+    };
+
+    // 病种信息定义
+    var diseaseInfo = {
+      '屈光手术': { desc: '激光矫正近视、远视、散光', age: '18-45岁', risk: '中等' },
+      '糖尿病': { desc: '慢性代谢性疾病，需长期管理血糖', age: '40岁以上', risk: '高' },
+      '炎症性肠病': { desc: '包括克罗恩病和溃疡性结肠炎', age: '20-40岁', risk: '高' },
+      '消化性溃疡': { desc: '胃或十二指肠黏膜溃疡', age: '30-60岁', risk: '中等' },
+      '胃镜': { desc: '上消化道内镜检查', age: '40岁以上', risk: '低' },
+      '肠镜': { desc: '结肠内镜检查', age: '45岁以上', risk: '低' },
+      '胃炎': { desc: '胃黏膜炎症，分为急性和慢性', age: '30-60岁', risk: '低' },
+      '胃肠镜': { desc: '胃镜和肠镜联合检查', age: '40岁以上', risk: '低' },
+      '幽门': { desc: '幽门螺杆菌感染，可引起胃炎胃溃疡', age: '全年龄段', risk: '中等' },
+      '高血压': { desc: '动脉血压持续升高的慢性疾病', age: '40岁以上', risk: '高' },
+      '冠心病': { desc: '冠状动脉粥样硬化性心脏病', age: '50岁以上', risk: '高' }
+    };
+
     var currentHospital = 'H001';
     var currentDate = fmtDate(new Date());
     document.getElementById('datePicker').value = currentDate;
@@ -258,7 +289,8 @@
       for(var i=0; i<diseases.length; i++) {
         var dRate = dailyPushData[i] > 0 ? ((dailyViewData[i]/dailyPushData[i])*100).toFixed(1) : '0.0';
         var avgDur = dailyViewData[i] > 0 ? formatDuration(calcDiseaseAvgDuration(dailyViewData[i], diseases[i])) : '-';
-        html += '<div class="disease-item" onclick="openDiseaseDetail(\'' + diseases[i] + '\', ' + i + ')">';
+        // 修复：使用数据属性传递参数，避免字符串转义问题
+        html += '<div class="disease-item" data-disease="' + encodeURIComponent(diseases[i]) + '" data-index="' + i + '" onclick="openDiseaseDetailFromAttr(this)">';
         html += '<div class="name">' + diseases[i] + '</div>';
         html += '<div class="stats"><span style="color:#16a34a">推送:' + dailyPushData[i] + '</span><span style="color:#ca8a04">查看:' + dailyViewData[i] + '</span><span style="color:#9333ea">均:' + avgDur + '</span></div>';
         html += '</div>';
@@ -278,34 +310,6 @@
         { name: '查看次数', type: 'bar', data: viewData, itemStyle: { color: '#16a34a' } }
       ]
     });
-
-    var diseaseInfo = {
-      '屈光手术': { desc: '激光矫正近视、远视、散光', age: '18-45岁', risk: '中等' },
-      '糖尿病': { desc: '慢性代谢性疾病，需长期管理血糖', age: '40岁以上', risk: '高' },
-      '炎症性肠病': { desc: '包括克罗恩病和溃疡性结肠炎', age: '20-40岁', risk: '高' },
-      '消化性溃疡': { desc: '胃或十二指肠黏膜溃疡', age: '30-60岁', risk: '中等' },
-      '胃镜': { desc: '上消化道内镜检查', age: '40岁以上', risk: '低' },
-      '肠镜': { desc: '结肠内镜检查', age: '45岁以上', risk: '低' },
-      '胃炎': { desc: '胃黏膜炎症，分为急性和慢性', age: '30-60岁', risk: '低' },
-      '胃肠镜': { desc: '胃镜和肠镜联合检查', age: '40岁以上', risk: '低' },
-      '幽门': { desc: '幽门螺杆菌感染，可引起胃炎胃溃疡', age: '全年龄段', risk: '中等' },
-      '高血压': { desc: '动脉血压持续升高的慢性疾病', age: '40岁以上', risk: '高' },
-      '冠心病': { desc: '冠状动脉粥样硬化性心脏病', age: '50岁以上', risk: '高' }
-    };
-
-    var diseaseRules = {
-      '屈光手术': ['术前评估提醒', '术前检查通知', '术前用药指导', '手术当日须知', '术后第1日复查', '术后第7日复查', '术后用药提醒'],
-      '糖尿病': ['空腹血糖监测提醒', '餐后血糖监测提醒', '用药提醒', '饮食指导', '运动建议', '糖化血红蛋白复查', '并发症筛查提醒'],
-      '炎症性肠病': ['用药依从性提醒', '复诊提醒', '饮食调整指导', '症状日记记录', '肠镜复查通知'],
-      '消化性溃疡': ['用药提醒', '饮食禁忌', '复查提醒', '症状自查'],
-      '胃镜': ['检查前禁食提醒', '检查前准备', '检查当日须知', '检查后注意事项', '报告解读'],
-      '肠镜': ['检查前3日饮食', '检查前清肠提醒', '检查当日须知', '检查后饮食恢复', '报告解读'],
-      '胃炎': ['用药提醒', '饮食指导', '复查提醒'],
-      '胃肠镜': ['检查前准备', '检查前清肠', '检查当日须知', '检查后注意事项', '报告解读'],
-      '幽门': ['用药提醒', '四联疗法指导', '复查呼气试验', '家庭防交叉感染', '饮食指导'],
-      '高血压': ['血压监测提醒', '用药提醒', '低盐饮食指导', '复诊提醒'],
-      '冠心病': ['用药提醒', '症状自查', '复诊提醒', '运动指导', '急救知识']
-    };
 
     function genRuleNodeData(hospitalId, dateStr, diseaseName, basePush, baseView) {
       var nodes = diseaseRules[diseaseName] || ['默认规则'];
@@ -359,7 +363,8 @@
         var avgDurSec = vArr[i] > 0 ? calcDiseaseAvgDuration(vArr[i], diseases[i]) : 0;
         totalSec += avgDurSec * vArr[i];
         var rowKey = mode + '-' + i;
-        rows += '<tr style="border-bottom:1px solid #f1f5f9;cursor:pointer" onclick="toggleNodeRow(\'' + rowKey + '\',\'' + diseases[i].replace(/'/g,"\\'") + '\',' + i + ',\'' + mode + '\')">';
+        // 修复：使用数据属性传递参数，避免字符串转义问题
+        rows += '<tr style="border-bottom:1px solid #f1f5f9;cursor:pointer" data-rowkey="' + rowKey + '" data-disease="' + encodeURIComponent(diseases[i]) + '" data-index="' + i + '" data-mode="' + mode + '" onclick="toggleNodeRowFromAttr(this)">';
         rows += '<td style="padding:10px;text-align:center;color:#64748b" id="arrow-' + rowKey + '">▶</td>';
         rows += '<td style="padding:10px">' + diseases[i] + '</td>';
         rows += '<td style="padding:10px;text-align:right;color:#2563eb;font-weight:600">' + pArr[i] + '</td>';
@@ -383,7 +388,13 @@
       return rows;
     }
 
-    function toggleNodeRow(rowKey, diseaseName, index, mode) {
+    // 修复：新增通过属性获取参数的函数，避免字符串转义问题
+    function toggleNodeRowFromAttr(el) {
+      var rowKey = el.dataset.rowkey;
+      var diseaseName = decodeURIComponent(el.dataset.disease);
+      var index = parseInt(el.dataset.index);
+      var mode = el.dataset.mode;
+      
       var tr = document.getElementById('nodes-' + rowKey);
       var arrow = document.getElementById('arrow-' + rowKey);
       if(!tr) return;
@@ -401,6 +412,13 @@
         tr.style.display = 'none';
         arrow.textContent = '▶';
       }
+    }
+
+    // 修复：新增通过属性打开病种详情的函数
+    function openDiseaseDetailFromAttr(el) {
+      var diseaseName = decodeURIComponent(el.dataset.disease);
+      var index = parseInt(el.dataset.index);
+      openDiseaseDetail(diseaseName, index);
     }
 
     function calcAvgDurationSec(seed) {
@@ -503,8 +521,14 @@
       document.getElementById('modal').classList.remove('active');
     }
 
+    // 修复：弹窗点击穿透问题
     document.getElementById('modal').addEventListener('click', function(e) {
-      if(e.target.classList.contains('modal')) closeModal();
+      if(e.target === this) closeModal(); // 只在点击蒙层时关闭
+    });
+
+    // 阻止模态框内容区域的点击事件冒泡
+    document.querySelector('.modal-content').addEventListener('click', function(e) {
+      e.stopPropagation();
     });
 
     var chartMain = echarts.getInstanceByDom(document.getElementById('mainChart'));
